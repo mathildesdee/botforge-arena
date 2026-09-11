@@ -206,3 +206,50 @@ button.primary:hover:not(:disabled) {
   color: #7a8699;
   font-size: 13px;
 }
+
+input[type='file'] {
+  color: #d5dbe3;
+  font-size: 13px;
+}
+
+.banner {
+  margin-top: 20px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+
+.banner.success {
+  background: rgba(76, 175, 80, 0.12);
+  border-color: #4caf50;
+  color: #8ee69a;
+}
+
+.banner.error {
+  background: rgba(229, 57, 53, 0.12);
+  border-color: #e53935;
+  color: #f2a3a1;
+}
+
+.error-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+
+.error-item {
+  padding: 6px 0;
+  border-top: 1px solid rgba(229, 57, 53, 0.25);
+}
+
+.error-item:first-child {
+  border-top: none;
+}
+
+.error-item code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}

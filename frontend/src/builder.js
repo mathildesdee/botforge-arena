@@ -3,14 +3,7 @@
 // server still re-validates on upload (separate backend issue), since
 // the server is always the source of truth for whether a robot is legal.
 
-const STATS = [
-  { key: 'speed', label: 'Speed' },
-  { key: 'armor', label: 'Armor' },
-  { key: 'weapon_power', label: 'Weapon Power' },
-  { key: 'accuracy', label: 'Accuracy' },
-  { key: 'fire_rate', label: 'Fire Rate' },
-  { key: 'sensor_range', label: 'Sensor Range' },
-];
+import { BUILD_STATS as STATS, renderRobotCard } from './robotCard.js';
 
 const TOTAL_BUILD_POINTS = 100;
 const STORAGE_KEY = 'botforge:saved-robots';
@@ -43,32 +36,6 @@ function renderPointsRemaining(total) {
     remaining >= 0 ? `${remaining} points remaining` : `${-remaining} points over budget`;
   pointsRemainingEl.classList.toggle('over-budget', remaining < 0);
   saveButton.disabled = remaining < 0 || !nameInput.value.trim();
-}
-
-function renderRobotCard(build) {
-  const maxStat = Math.max(1, ...Object.values(build));
-  robotCardEl.innerHTML = '<h3>Preview</h3>';
-  STATS.forEach((stat) => {
-    const value = build[stat.key];
-    const row = document.createElement('div');
-    row.className = 'card-bar-row';
-
-    const label = document.createElement('span');
-    label.textContent = stat.label;
-
-    const track = document.createElement('div');
-    track.className = 'card-bar-track';
-    const fill = document.createElement('div');
-    fill.className = 'card-bar-fill';
-    fill.style.width = `${(value / maxStat) * 100}%`;
-    track.appendChild(fill);
-
-    const valueEl = document.createElement('span');
-    valueEl.textContent = value;
-
-    row.append(label, track, valueEl);
-    robotCardEl.appendChild(row);
-  });
 }
 
 function loadSavedRobots() {
@@ -140,7 +107,7 @@ function loadRobotIntoForm(robot) {
 function refresh() {
   const build = currentBuild();
   renderPointsRemaining(totalPoints(build));
-  renderRobotCard(build);
+  renderRobotCard(robotCardEl, 'Preview', build);
 }
 
 sliders.forEach((slider) => {

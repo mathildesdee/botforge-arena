@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BotForge Arena — Upload Robot</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <nav>
+        <a href="index.html">Arena</a>
+        <a href="builder.html">Robot Builder</a>
+        <a href="upload.html">Upload Robot</a>
+      </nav>
+
+      <h1>Upload Robot</h1>
+      <p class="hint">
+        Pick a robot JSON file (e.g. one downloaded from the Robot Builder) and validate it against
+        the server rules before it can enter the arena.
+      </p>
+
+      <div class="field">
+        <label for="robot-file">Robot JSON file</label>
+        <input type="file" id="robot-file" accept="application/json,.json" />
+      </div>
+
+      <div class="actions">
+        <button type="button" id="validate-button" class="primary">Validate &amp; preview</button>
+      </div>
+
+      <div id="upload-result"></div>
+    </div>
+
+    <script src="src/upload.js" type="module"></script>
+  </body>
+</html>

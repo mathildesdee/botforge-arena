@@ -78,11 +78,36 @@ Server rejects any build where the values sum to more than 100.
 - Allowed actions (stage 1): `move_forward`, `move_backward`, `turn_left`, `turn_right`, `turn_toward_enemy`, `move_toward_enemy`, `move_away_from_enemy`, `shoot`, `select_nearest_enemy`, `select_weakest_enemy`, `wait`, `scan`.
 - Interpreter must cap execution at a fixed number of operations per robot per tick (start at 50) and skip the robot's turn for that tick if exceeded.
 
-## 4. Sensor visibility
+## 4. Robot validation endpoint
+
+`POST /api/robots/validate` — request body is a robot program JSON matching section 3.
+
+Success response `200`:
+
+```json
+{ "valid": true, "robot": { "name": "Hunter V3", "version": 1, "build": { "...": "..." }, "logic": [] } }
+```
+
+Failure response `422`:
+
+```json
+{
+  "valid": false,
+  "errors": [
+    { "field": "build", "message": "Build points sum to 135; the maximum is 100." },
+    { "field": "name", "message": "Robot name is required." }
+  ]
+}
+```
+
+- `field` uses dot-path notation matching the robot JSON structure (e.g. `build.speed`, `logic[2].if`), so the frontend can associate an error with a specific part of the upload.
+- This same shape is what Milestone 3's builder page will eventually POST to for server-side save/validation, once that endpoint exists.
+
+## 5. Sensor visibility
 
 A robot only receives enemy data for robots within its `sensor_range`. Never expose an enemy's exact build stats or program — only what a sensor plausibly reveals (distance, direction, estimated health).
 
-## 5. Non-negotiable rules
+## 6. Non-negotiable rules
 
 - The server decides truth; the browser never computes hits or winners itself.
 - Uploaded robots are JSON only — never arbitrary code execution.
