@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BotForge Arena — Robot Builder</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <nav>
+        <a href="index.html">Arena</a>
+        <a href="builder.html">Robot Builder</a>
+      </nav>
+
+      <h1>Robot Builder</h1>
+      <p class="hint">
+        Every robot gets exactly 100 build points. A fast robot can't also be the toughest and the
+        most accurate — spend wisely.
+      </p>
+
+      <form id="robot-form">
+        <div class="field">
+          <label for="robot-name">Robot name</label>
+          <input type="text" id="robot-name" maxlength="40" placeholder="Hunter V3" required />
+        </div>
+
+        <div class="points-remaining" id="points-remaining">100 points remaining</div>
+
+        <div class="stats">
+          <div class="stat-row">
+            <label for="stat-speed">Speed</label>
+            <input type="range" id="stat-speed" data-stat="speed" min="0" max="100" value="0" />
+            <span class="stat-value" id="stat-speed-value">0</span>
+          </div>
+          <div class="stat-row">
+            <label for="stat-armor">Armor</label>
+            <input type="range" id="stat-armor" data-stat="armor" min="0" max="100" value="0" />
+            <span class="stat-value" id="stat-armor-value">0</span>
+          </div>
+          <div class="stat-row">
+            <label for="stat-weapon_power">Weapon Power</label>
+            <input
+              type="range"
+              id="stat-weapon_power"
+              data-stat="weapon_power"
+              min="0"
+              max="100"
+              value="0"
+            />
+            <span class="stat-value" id="stat-weapon_power-value">0</span>
+          </div>
+          <div class="stat-row">
+            <label for="stat-accuracy">Accuracy</label>
+            <input type="range" id="stat-accuracy" data-stat="accuracy" min="0" max="100" value="0" />
+            <span class="stat-value" id="stat-accuracy-value">0</span>
+          </div>
+          <div class="stat-row">
+            <label for="stat-fire_rate">Fire Rate</label>
+            <input
+              type="range"
+              id="stat-fire_rate"
+              data-stat="fire_rate"
+              min="0"
+              max="100"
+              value="0"
+            />
+            <span class="stat-value" id="stat-fire_rate-value">0</span>
+          </div>
+          <div class="stat-row">
+            <label for="stat-sensor_range">Sensor Range</label>
+            <input
+              type="range"
+              id="stat-sensor_range"
+              data-stat="sensor_range"
+              min="0"
+              max="100"
+              value="0"
+            />
+            <span class="stat-value" id="stat-sensor_range-value">0</span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="submit" id="save-button" class="primary">Save robot</button>
+          <button type="button" id="download-button">Download JSON</button>
+        </div>
+      </form>
+
+      <div class="robot-card" id="robot-card">
+        <h3>Preview</h3>
+      </div>
+
+      <h2>Saved robots (this browser only)</h2>
+      <div id="saved-robots-list" class="saved-list"></div>
+    </div>
+
+    <script src="src/builder.js" type="module"></script>
+  </body>
+</html>
