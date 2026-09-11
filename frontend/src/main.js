@@ -1,4 +1,12 @@
-// Entry point for the Phaser arena. See docs/ARCHITECTURE.md for the
-// WebSocket game_state message shape this will eventually render.
+import ArenaScene from './scenes/ArenaScene.js';
 
-console.log("BotForge Arena frontend placeholder");
+const config = {
+  type: Phaser.AUTO,
+  width: 800,
+  height: 600,
+  parent: 'arena',
+  backgroundColor: '#0b0e13',
+  scene: [ArenaScene],
+};
+
+new Phaser.Game(config);

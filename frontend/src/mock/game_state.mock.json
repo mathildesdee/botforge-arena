@@ -1,0 +1,32 @@
+{
+  "type": "game_state",
+  "tick": 0,
+  "robots": [
+    {
+      "id": "robot_1",
+      "name": "Hunter V3",
+      "x": 220,
+      "y": 300,
+      "direction": 20,
+      "health": 82,
+      "max_health": 100,
+      "energy": 61,
+      "alive": true
+    },
+    {
+      "id": "robot_2",
+      "name": "Tank MK2",
+      "x": 580,
+      "y": 320,
+      "direction": 195,
+      "health": 55,
+      "max_health": 100,
+      "energy": 40,
+      "alive": true
+    }
+  ],
+  "projectiles": [
+    { "id": "proj_9", "x": 400, "y": 300, "direction": 20, "owner_id": "robot_1" }
+  ],
+  "events": []
+}
