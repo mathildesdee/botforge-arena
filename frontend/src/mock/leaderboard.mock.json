@@ -1,0 +1,67 @@
+[
+  {
+    "rank": 1,
+    "robot_name": "Hunter V4",
+    "creator": "alice",
+    "matches": 18,
+    "rounds_won": 61,
+    "rounds_lost": 19,
+    "win_pct": 0.76,
+    "damage_caused": 7420,
+    "damage_received": 4110,
+    "accuracy": 0.52,
+    "kills": 34
+  },
+  {
+    "rank": 2,
+    "robot_name": "Tank MK2",
+    "creator": "bob",
+    "matches": 18,
+    "rounds_won": 54,
+    "rounds_lost": 26,
+    "win_pct": 0.68,
+    "damage_caused": 6110,
+    "damage_received": 5230,
+    "accuracy": 0.41,
+    "kills": 27
+  },
+  {
+    "rank": 3,
+    "robot_name": "Mosquito",
+    "creator": "alice",
+    "matches": 15,
+    "rounds_won": 39,
+    "rounds_lost": 31,
+    "win_pct": 0.56,
+    "damage_caused": 3980,
+    "damage_received": 3610,
+    "accuracy": 0.29,
+    "kills": 19
+  },
+  {
+    "rank": 4,
+    "robot_name": "The Coward",
+    "creator": "carla",
+    "matches": 12,
+    "rounds_won": 22,
+    "rounds_lost": 28,
+    "win_pct": 0.44,
+    "damage_caused": 1890,
+    "damage_received": 2200,
+    "accuracy": 0.33,
+    "kills": 8
+  },
+  {
+    "rank": 5,
+    "robot_name": "Ambusher",
+    "creator": "bob",
+    "matches": 10,
+    "rounds_won": 17,
+    "rounds_lost": 23,
+    "win_pct": 0.42,
+    "damage_caused": 2410,
+    "damage_received": 2890,
+    "accuracy": 0.38,
+    "kills": 11
+  }
+]

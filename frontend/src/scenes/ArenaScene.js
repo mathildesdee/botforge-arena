@@ -1,11 +1,12 @@
-// Renders whatever game_state messages it's given (see
-// docs/ARCHITECTURE.md #1). This scene never decides positions or
-// outcomes itself — it just reflects state coming over the wire from
-// GameSocket. Robot/projectile views are created once per id and then
-// updated in place so movement reads as continuous rather than a
-// full redraw every tick.
+// Renders whatever messages it's given over the WebSocket (see
+// docs/ARCHITECTURE.md #1-#2). This scene never decides positions,
+// scores, or outcomes itself — it just reflects state coming over the
+// wire from GameSocket. Robot/projectile views are created once per
+// id and then updated in place so movement reads as continuous
+// rather than a full redraw every tick.
 
 import GameSocket from '../net/GameSocket.js';
+import MatchHud from '../hud/MatchHud.js';
 import { WS_URL } from '../config.js';
 
 const FACING_LENGTH = 26;
@@ -23,6 +24,7 @@ export default class ArenaScene extends Phaser.Scene {
   constructor() {
     super('ArenaScene');
     this.robotViews = new Map();
+    this.robotNames = new Map();
     this.projectileViews = [];
   }
 
@@ -35,13 +37,38 @@ export default class ArenaScene extends Phaser.Scene {
       .text(16, 12, STATUS_LABEL.connecting, { fontSize: '12px', color: '#7a8699' })
       .setDepth(10);
 
+    this.hud = new MatchHud(this);
+
     this.gameSocket = new GameSocket(WS_URL, {
-      onGameState: (state) => this.applyState(state),
+      onMessage: (message) => this.handleMessage(message),
       onStatusChange: (status) => this.statusText.setText(STATUS_LABEL[status] || status),
     });
     this.gameSocket.connect();
 
     this.events.once('shutdown', () => this.gameSocket.disconnect());
+  }
+
+  handleMessage(message) {
+    switch (message.type) {
+      case 'game_state':
+        this.applyState(message);
+        break;
+      case 'match_start':
+        this.hud.setTotalRounds(message.total_rounds);
+        break;
+      case 'round_start':
+        this.hud.setRound(message.round, message.total_rounds);
+        break;
+      case 'round_end':
+        this.hud.setScores(message.scores, this.robotNames);
+        break;
+      case 'match_end':
+        this.hud.setScores(message.final_scores, this.robotNames);
+        this.hud.setMatchFinished();
+        break;
+      default:
+        break;
+    }
   }
 
   applyState(state) {
@@ -50,6 +77,8 @@ export default class ArenaScene extends Phaser.Scene {
   }
 
   upsertRobot(robot) {
+    this.robotNames.set(robot.id, robot.name);
+
     let view = this.robotViews.get(robot.id);
     if (!view) {
       view = this.createRobotView();

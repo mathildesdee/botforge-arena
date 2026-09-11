@@ -31,9 +31,38 @@ The Python server is always authoritative: it decides positions, hits, damage, a
 }
 ```
 
-Other message `type`s follow the same envelope shape: `match_start`, `round_start`, `round_end`, `match_end`, `error`.
+## 2. Match lifecycle messages (same WebSocket connection)
 
-## 2. Robot build (hardware points)
+These share the connection with `game_state` but arrive far less often — on round/match boundaries rather than every tick. A HUD listens for these to know the round number and score; it does not derive them from `game_state`.
+
+```json
+{ "type": "match_start", "total_rounds": 10, "robots": [{ "id": "robot_1", "name": "Hunter V3" }] }
+```
+
+```json
+{ "type": "round_start", "round": 3, "total_rounds": 10 }
+```
+
+```json
+{
+  "type": "round_end",
+  "round": 3,
+  "winner_id": "robot_1",
+  "scores": { "robot_1": 9, "robot_2": 3 }
+}
+```
+
+`scores` is the running total across all rounds so far (win = 3pts, survived draw = 1pt, per the project brief), not just this round's points.
+
+```json
+{ "type": "match_end", "winner_id": "robot_1", "final_scores": { "robot_1": 24, "robot_2": 9 } }
+```
+
+```json
+{ "type": "error", "message": "Logic execution limit reached", "robot_id": "robot_2" }
+```
+
+## 3. Robot build (hardware points)
 
 Exactly 100 points total, distributed across:
 
@@ -50,7 +79,7 @@ Exactly 100 points total, distributed across:
 
 Server rejects any build where the values sum to more than 100.
 
-## 3. Robot program (uploaded JSON)
+## 4. Robot program (uploaded JSON)
 
 ```json
 {
@@ -78,9 +107,9 @@ Server rejects any build where the values sum to more than 100.
 - Allowed actions (stage 1): `move_forward`, `move_backward`, `turn_left`, `turn_right`, `turn_toward_enemy`, `move_toward_enemy`, `move_away_from_enemy`, `shoot`, `select_nearest_enemy`, `select_weakest_enemy`, `wait`, `scan`.
 - Interpreter must cap execution at a fixed number of operations per robot per tick (start at 50) and skip the robot's turn for that tick if exceeded.
 
-## 4. Robot validation endpoint
+## 5. Robot validation endpoint
 
-`POST /api/robots/validate` — request body is a robot program JSON matching section 3.
+`POST /api/robots/validate` — request body is a robot program JSON matching section 4.
 
 Success response `200`:
 
@@ -103,11 +132,33 @@ Failure response `422`:
 - `field` uses dot-path notation matching the robot JSON structure (e.g. `build.speed`, `logic[2].if`), so the frontend can associate an error with a specific part of the upload.
 - This same shape is what Milestone 3's builder page will eventually POST to for server-side save/validation, once that endpoint exists.
 
-## 5. Sensor visibility
+## 6. Leaderboard entry (persisted stats)
+
+One row per robot, matching what the SQLite persistence layer stores:
+
+```json
+{
+  "rank": 1,
+  "robot_name": "Hunter V3",
+  "creator": "player_name",
+  "matches": 12,
+  "rounds_won": 34,
+  "rounds_lost": 11,
+  "win_pct": 0.76,
+  "damage_caused": 4820,
+  "damage_received": 3010,
+  "accuracy": 0.47,
+  "kills": 18
+}
+```
+
+The leaderboard page renders a list of these; where the data comes from (static mock JSON today, a real `/api/leaderboard` endpoint once the persistence issue lands) is an implementation detail behind that same shape.
+
+## 7. Sensor visibility
 
 A robot only receives enemy data for robots within its `sensor_range`. Never expose an enemy's exact build stats or program — only what a sensor plausibly reveals (distance, direction, estimated health).
 
-## 6. Non-negotiable rules
+## 8. Non-negotiable rules
 
 - The server decides truth; the browser never computes hits or winners itself.
 - Uploaded robots are JSON only — never arbitrary code execution.

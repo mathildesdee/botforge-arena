@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BotForge Arena — Leaderboard</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <nav>
+        <a href="index.html">Arena</a>
+        <a href="builder.html">Robot Builder</a>
+        <a href="upload.html">Upload Robot</a>
+        <a href="leaderboard.html">Leaderboard</a>
+      </nav>
+
+      <h1>Leaderboard</h1>
+      <p class="hint">
+        Ranked by win percentage. Backed by static mock data for now — will switch to a real
+        leaderboard endpoint once the backend persistence layer exists (docs/ARCHITECTURE.md #6).
+      </p>
+
+      <div class="table-wrap">
+        <table class="leaderboard-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Robot</th>
+              <th>Creator</th>
+              <th class="numeric">Matches</th>
+              <th class="numeric">Rounds W-L</th>
+              <th class="numeric">Win %</th>
+              <th class="numeric">Dmg caused</th>
+              <th class="numeric">Dmg received</th>
+              <th class="numeric">Accuracy</th>
+              <th class="numeric">Kills</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script src="src/leaderboard.js" type="module"></script>
+  </body>
+</html>

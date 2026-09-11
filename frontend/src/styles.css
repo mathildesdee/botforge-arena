@@ -253,3 +253,40 @@ input[type='file'] {
   border-radius: 4px;
   font-size: 12px;
 }
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 8px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.leaderboard-table th {
+  color: #7a8699;
+  font-weight: 600;
+  border-bottom: 1px solid #2a3442;
+}
+
+.leaderboard-table td.numeric,
+.leaderboard-table th.numeric {
+  text-align: right;
+}
+
+.leaderboard-table tbody tr:nth-child(odd) {
+  background: #10151c;
+}
+
+.leaderboard-table tbody tr:first-child td {
+  color: #ffd54f;
+  font-weight: 600;
+}

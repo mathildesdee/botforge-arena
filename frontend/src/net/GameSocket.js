@@ -1,15 +1,14 @@
-// Thin wrapper around the browser WebSocket API for the game_state
-// protocol in docs/ARCHITECTURE.md. Reconnects automatically on drop,
-// and only forwards messages of type "game_state" — other envelope
-// types (match_start, round_end, etc.) can be handled here later
-// without touching the scenes that consume game state.
+// Thin wrapper around the browser WebSocket API. Reconnects
+// automatically on drop and forwards every parsed message as-is —
+// dispatching on `message.type` (game_state, round_start, etc, see
+// docs/ARCHITECTURE.md #1-#2) is the caller's job, not this class's.
 
 const RECONNECT_DELAY_MS = 2000;
 
 export default class GameSocket {
-  constructor(url, { onGameState, onStatusChange } = {}) {
+  constructor(url, { onMessage, onStatusChange } = {}) {
     this.url = url;
-    this.onGameState = onGameState || (() => {});
+    this.onMessage = onMessage || (() => {});
     this.onStatusChange = onStatusChange || (() => {});
     this.socket = null;
     this.shouldReconnect = false;
@@ -34,9 +33,7 @@ export default class GameSocket {
         console.error('GameSocket: received non-JSON message', err);
         return;
       }
-      if (message.type === 'game_state') {
-        this.onGameState(message);
-      }
+      this.onMessage(message);
     });
 
     this.socket.addEventListener('close', () => {
