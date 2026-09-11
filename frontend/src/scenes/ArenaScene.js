@@ -1,73 +1,99 @@
-// Renders a game_state snapshot (see docs/ARCHITECTURE.md #1) as a top-down
-// arena. This scene only draws whatever data it's given — it never decides
-// positions or outcomes itself. Right now that data is static mock JSON;
-// a later issue swaps the source for live WebSocket messages without
-// needing to change how robots are drawn.
+// Renders whatever game_state messages it's given (see
+// docs/ARCHITECTURE.md #1). This scene never decides positions or
+// outcomes itself — it just reflects state coming over the wire from
+// GameSocket. Robot/projectile views are created once per id and then
+// updated in place so movement reads as continuous rather than a
+// full redraw every tick.
 
-const ROBOT_RADIUS = 18;
+import GameSocket from '../net/GameSocket.js';
+import { WS_URL } from '../config.js';
+
 const FACING_LENGTH = 26;
 const HEALTH_BAR_WIDTH = 40;
 const HEALTH_BAR_HEIGHT = 6;
 
+const STATUS_LABEL = {
+  connecting: 'Connecting…',
+  connected: 'Connected',
+  disconnected: 'Disconnected — retrying…',
+  error: 'Connection error',
+};
+
 export default class ArenaScene extends Phaser.Scene {
   constructor() {
     super('ArenaScene');
-  }
-
-  preload() {
-    this.load.json('gameState', 'src/mock/game_state.mock.json');
+    this.robotViews = new Map();
+    this.projectileViews = [];
   }
 
   create() {
-    const state = this.cache.json.get('gameState');
-
     this.add
       .rectangle(400, 300, 800, 600, 0x10151c)
       .setStrokeStyle(2, 0x2a3442);
 
-    this.add
-      .text(16, 12, 'Static mock render — no live connection yet', {
-        fontSize: '12px',
-        color: '#7a8699',
-      })
+    this.statusText = this.add
+      .text(16, 12, STATUS_LABEL.connecting, { fontSize: '12px', color: '#7a8699' })
       .setDepth(10);
 
-    state.robots.forEach((robot) => this.renderRobot(robot));
-    state.projectiles.forEach((projectile) => this.renderProjectile(projectile));
+    this.gameSocket = new GameSocket(WS_URL, {
+      onGameState: (state) => this.applyState(state),
+      onStatusChange: (status) => this.statusText.setText(STATUS_LABEL[status] || status),
+    });
+    this.gameSocket.connect();
+
+    this.events.once('shutdown', () => this.gameSocket.disconnect());
   }
 
-  renderRobot(robot) {
-    const container = this.add.container(robot.x, robot.y);
+  applyState(state) {
+    (state.robots || []).forEach((robot) => this.upsertRobot(robot));
+    this.redrawProjectiles(state.projectiles || []);
+  }
 
-    const body = this.add.circle(0, 0, ROBOT_RADIUS, robot.alive ? 0x4fc3f7 : 0x555f6b);
+  upsertRobot(robot) {
+    let view = this.robotViews.get(robot.id);
+    if (!view) {
+      view = this.createRobotView();
+      this.robotViews.set(robot.id, view);
+    }
+    this.updateRobotView(view, robot);
+  }
 
-    const rad = Phaser.Math.DegToRad(robot.direction);
+  createRobotView() {
+    const container = this.add.container(0, 0);
+    const body = this.add.circle(0, 0, 18, 0x4fc3f7);
     const facing = this.add.graphics();
-    facing.lineStyle(3, 0xffffff, 1);
-    facing.lineBetween(0, 0, Math.cos(rad) * FACING_LENGTH, Math.sin(rad) * FACING_LENGTH);
-
     const label = this.add
-      .text(0, -34, robot.name, { fontSize: '12px', color: '#e8edf2' })
+      .text(0, -34, '', { fontSize: '12px', color: '#e8edf2' })
       .setOrigin(0.5, 1);
-
-    const healthRatio = Phaser.Math.Clamp(robot.health / robot.max_health, 0, 1);
     const barBg = this.add
       .rectangle(0, -22, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT, 0x2a3442)
       .setOrigin(0.5, 0.5);
     const barFg = this.add
-      .rectangle(
-        -HEALTH_BAR_WIDTH / 2,
-        -22,
-        HEALTH_BAR_WIDTH * healthRatio,
-        HEALTH_BAR_HEIGHT,
-        healthRatio > 0.3 ? 0x4caf50 : 0xe53935
-      )
+      .rectangle(-HEALTH_BAR_WIDTH / 2, -22, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT, 0x4caf50)
       .setOrigin(0, 0.5);
 
     container.add([body, facing, label, barBg, barFg]);
+
+    return { container, body, facing, label, barFg };
   }
 
-  renderProjectile(projectile) {
-    this.add.circle(projectile.x, projectile.y, 4, 0xffca28);
+  updateRobotView(view, robot) {
+    view.container.setPosition(robot.x, robot.y);
+    view.body.setFillStyle(robot.alive ? 0x4fc3f7 : 0x555f6b);
+    view.label.setText(robot.name);
+
+    const rad = Phaser.Math.DegToRad(robot.direction);
+    view.facing.clear();
+    view.facing.lineStyle(3, 0xffffff, 1);
+    view.facing.lineBetween(0, 0, Math.cos(rad) * FACING_LENGTH, Math.sin(rad) * FACING_LENGTH);
+
+    const healthRatio = Phaser.Math.Clamp(robot.health / robot.max_health, 0, 1);
+    view.barFg.width = HEALTH_BAR_WIDTH * healthRatio;
+    view.barFg.fillColor = healthRatio > 0.3 ? 0x4caf50 : 0xe53935;
+  }
+
+  redrawProjectiles(projectiles) {
+    this.projectileViews.forEach((view) => view.destroy());
+    this.projectileViews = projectiles.map((p) => this.add.circle(p.x, p.y, 4, 0xffca28));
   }
 }
