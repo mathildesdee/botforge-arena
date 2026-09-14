@@ -4,23 +4,12 @@
 // the server is always the source of truth for whether a robot is legal.
 
 import { BUILD_STATS as STATS, renderRobotCard } from './robotCard.js';
+import { createLogicEditor } from './logicEditor.js';
 
 const TOTAL_BUILD_POINTS = 100;
 const STORAGE_KEY = 'botforge:saved-robots';
 const CREATOR_STORAGE_KEY = 'botforge:creator-name';
-
-// This page only lets a player allocate build points — there's no
-// logic editor yet (that's Milestone 5, a separate feature). The
-// real backend validator requires `version` and `logic` on every
-// robot regardless, so every robot built here ships with this
-// baseline behaviour (find an enemy, close in, shoot) rather than
-// failing validation or sitting inert in the arena. Matches the
-// "start simple" example from the project brief.
 const DEFAULT_VERSION = 1;
-const DEFAULT_LOGIC = [
-  { priority: 1, if: { op: 'lt', left: 'enemy.distance', right: 250 }, then: 'shoot' },
-  { priority: 2, if: { op: 'lt', left: 'enemy.distance', right: 999999 }, then: 'move_toward_enemy' },
-];
 
 const form = document.getElementById('robot-form');
 const nameInput = document.getElementById('robot-name');
@@ -30,8 +19,13 @@ const robotCardEl = document.getElementById('robot-card');
 const savedListEl = document.getElementById('saved-robots-list');
 const saveButton = document.getElementById('save-button');
 const downloadButton = document.getElementById('download-button');
+const addRuleButton = document.getElementById('add-rule-button');
 
 const sliders = STATS.map((stat) => document.getElementById(`stat-${stat.key}`));
+const logicEditor = createLogicEditor(
+  document.getElementById('logic-rules'),
+  document.getElementById('logic-preview')
+);
 
 function currentBuild() {
   const build = {};
@@ -46,7 +40,7 @@ function totalPoints(build) {
 }
 
 function buildRobotPayload(name, creator, build) {
-  return { name, creator, version: DEFAULT_VERSION, build, logic: DEFAULT_LOGIC };
+  return { name, creator, version: DEFAULT_VERSION, build, logic: logicEditor.getLogic() };
 }
 
 function renderPointsRemaining(total) {
@@ -121,6 +115,7 @@ function loadRobotIntoForm(robot) {
     sliders[i].value = robot.build[stat.key] ?? 0;
     document.getElementById(`${sliders[i].id}-value`).textContent = sliders[i].value;
   });
+  logicEditor.setLogic(robot.logic);
   refresh();
 }
 
@@ -138,6 +133,8 @@ sliders.forEach((slider) => {
 });
 
 nameInput.addEventListener('input', refresh);
+
+addRuleButton.addEventListener('click', () => logicEditor.addRule());
 
 creatorInput.addEventListener('input', () => {
   try {

@@ -332,3 +332,66 @@ input[type='file'] {
   font-size: 12px;
   color: #7a8699;
 }
+
+.rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: #10151c;
+  border: 1px solid #2a3442;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.rule-priority {
+  color: #7a8699;
+  font-variant-numeric: tabular-nums;
+  min-width: 24px;
+}
+
+.rule-word {
+  color: #7a8699;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rule-row select,
+.rule-row input {
+  background: #1a2230;
+  border: 1px solid #2a3442;
+  border-radius: 4px;
+  color: #e8edf2;
+  font-size: 13px;
+  padding: 5px 6px;
+}
+
+.rule-number {
+  width: 80px;
+}
+
+.rule-controls {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.rule-controls button {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.logic-preview {
+  margin-top: 12px;
+  padding: 12px;
+  background: #05070a;
+  border: 1px solid #2a3442;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #a9b4c2;
+  overflow-x: auto;
+  white-space: pre;
+}
