@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from . import db
 from .lobby import Lobby
 from .match import DEFAULT_NUM_ROUNDS, DEFAULT_ROUND_TIME_LIMIT, Match
+from .replay import Recorder
 from .robot import Robot
 from .tournament import Participant, Tournament
 from .validation import validate_robot_json
@@ -62,6 +63,23 @@ def validate_robot(robot: dict):
 @app.get("/api/leaderboard")
 def leaderboard():
     return db.get_leaderboard()
+
+
+@app.get("/api/replays")
+def replays():
+    """Lightweight index of recorded rounds (PDF section 28) — enough
+    for a browser to list past matches before fetching a full one."""
+    return db.list_replays()
+
+
+@app.get("/api/replays/{round_result_id}")
+def replay(round_result_id: int):
+    """The full tick-by-tick recording for one round, plus its notable-
+    moment markers (first shot/hit, health thresholds, final kill)."""
+    recording = db.get_replay(round_result_id)
+    if recording is None:
+        return {"found": False}
+    return {"found": True, **recording}
 
 
 class SimulateRequest(BaseModel):
@@ -223,20 +241,26 @@ async def _play_match(match, match_id, robot_version_lookup):
             "total_rounds": match.num_rounds,
         })
 
+        recorder = Recorder()  # PDF section 28: one recording per round
+
         while True:
             start = time.perf_counter()
             result = match.tick(DT)
 
-            await _broadcast(match.arena.state(events=result["events"]))
+            state = match.arena.state(events=result["events"])
+            recorder.record(state)
+            await _broadcast(state)
 
             round_result = result["round_result"]
             if round_result is not None:
-                db.record_round_result(match_id, round_result, robot_version_lookup)
+                round_result_id = db.record_round_result(match_id, round_result, robot_version_lookup)
+                db.save_replay(round_result_id, recorder.to_dict())
                 await _broadcast({
                     "type": "round_end",
                     "round": round_result.round_number,
                     "winner_id": round_result.winner_id,
                     "scores": dict(match.scores),
+                    "replay_id": round_result_id,
                 })
                 break
 

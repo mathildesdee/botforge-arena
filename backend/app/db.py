@@ -74,6 +74,12 @@ CREATE TABLE IF NOT EXISTS match_stats (
     kills INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (match_id, robot_version_id)
 );
+
+CREATE TABLE IF NOT EXISTS replays (
+    round_result_id INTEGER PRIMARY KEY REFERENCES round_results(id),
+    recording_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -149,7 +155,10 @@ def create_match(robot_version_ids):
 
 def record_round_result(match_id, round_result, robot_version_lookup):
     """`robot_version_lookup` maps in-arena robot_id -> robot_version_id
-    for every participant in the match (not just the winner)."""
+    for every participant in the match (not just the winner).
+
+    Returns the new round_results row id (needed to attach a replay via
+    save_replay())."""
     winner_version_id = (
         robot_version_lookup.get(round_result.winner_id) if round_result.winner_id else None
     )
@@ -175,6 +184,8 @@ def record_round_result(match_id, round_result, robot_version_lookup):
                 if arena_id in robot_version_lookup
             ],
         )
+
+    return round_result_id
 
 
 def finish_match(match_id):
@@ -210,6 +221,50 @@ def record_match_stats(match_id, robot_version_lookup, robots):
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             rows,
         )
+
+
+def save_replay(round_result_id, recording):
+    """Persists one round's recorded tick stream (see app/replay.py's
+    Recorder.to_dict()) so the browser can fetch and replay it later
+    (PDF section 28)."""
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO replays (round_result_id, recording_json) VALUES (?, ?)",
+            (round_result_id, json.dumps(recording)),
+        )
+
+
+def get_replay(round_result_id):
+    """Returns the recording dict for one round, or None if it was
+    never recorded (e.g. an /api/simulate run, which never persists)."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT recording_json FROM replays WHERE round_result_id = ?", (round_result_id,)
+        ).fetchone()
+    return json.loads(row["recording_json"]) if row else None
+
+
+def list_replays(limit=50):
+    """A lightweight index of recorded rounds — enough for a browser to
+    list "past matches" and let the player pick one to watch, without
+    downloading every full recording up front."""
+    query = """
+        SELECT
+            rr.id AS round_result_id,
+            rr.match_id AS match_id,
+            rr.round_number AS round_number,
+            rr.duration_seconds AS duration_seconds,
+            wr.name AS winner_name
+        FROM replays rep
+        JOIN round_results rr ON rr.id = rep.round_result_id
+        LEFT JOIN robot_versions wrv ON wrv.id = rr.winner_robot_version_id
+        LEFT JOIN robots wr ON wr.id = wrv.robot_id
+        ORDER BY rr.id DESC
+        LIMIT ?
+    """
+    with _connect() as conn:
+        rows = conn.execute(query, (limit,)).fetchall()
+    return [dict(row) for row in rows]
 
 
 def get_leaderboard(limit=50):
