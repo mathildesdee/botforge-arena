@@ -247,7 +247,17 @@ One row per robot, matching what the SQLite persistence layer stores:
 
 A robot only receives enemy data for robots within its `sensor_range`. Never expose an enemy's exact build stats or program — only what a sensor plausibly reveals (distance, direction, estimated health).
 
-## 10. Non-negotiable rules
+## 10. Robot debugger (client-side, own-robot-only)
+
+Clicking a robot in the Arena shows a debug panel. Since `game_state` never includes what a robot is "thinking" (no target, no active rule, no action — only position/health/energy), and never will for other players' robots (their program is never sent to your browser, matching section 9's information-hiding rule), this only works for the robot *you* uploaded:
+
+- The Lobby persists `player.id` and your validated robot JSON to `localStorage` (`botforge:my-player-id`, `botforge:my-robot`) the moment they're known.
+- The Arena reads both, and `frontend/src/robotDebugger.js` re-runs the interpreter's exact algorithm (condition evaluation, priority/else, sequence/behaviour expansion — mirrors `backend/app/interpreter.py`) purely to display the result. It never feeds back into gameplay; the server's own broadcast is still the only thing that actually moves anything.
+- Clicking any other robot shows only what's already visible on screen (name, health, energy, position) — no target/rule/action, since this browser was never given that robot's program.
+- Two backend constants have no other way to reach the client and are duplicated with a comment flagging the coupling: `DEFAULT_MAX_ENERGY` (100) and the `sensor_range` build-stat-to-pixel formula (`BASE_SENSOR_RANGE + stat * SENSOR_RANGE_PER_POINT`). If `backend/app/robot.py` changes either, the debugger drifts silently until someone notices.
+- `shots_fired`/`shots_hit` and weapon-cooldown state aren't broadcast at all, so the debugger shows nothing for them rather than guessing.
+
+## 11. Non-negotiable rules
 
 - The server decides truth; the browser never computes hits or winners itself.
 - Uploaded robots are JSON only — never arbitrary code execution.

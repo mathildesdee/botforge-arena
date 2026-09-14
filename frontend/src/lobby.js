@@ -11,6 +11,7 @@ import JsonSocket from './net/JsonSocket.js';
 import { renderRobotCard } from './robotCard.js';
 import { readRobotFile } from './robotFile.js';
 import { WS_URL } from './config.js';
+import { MY_PLAYER_ID_KEY, MY_ROBOT_KEY } from './robotDebuggerStorage.js';
 
 const nameInput = document.getElementById('player-name');
 const fileInput = document.getElementById('robot-file');
@@ -60,6 +61,13 @@ function renderPlayers(players) {
       isReady = player.ready;
       readyButton.textContent = isReady ? 'Cancel ready' : 'Mark ready';
       readyButton.disabled = !hasUploadedRobot;
+      try {
+        // Lets the Arena page later recognize which robot in a match
+        // is "yours" for the debugger — see robotDebugger.js.
+        localStorage.setItem(MY_PLAYER_ID_KEY, player.id);
+      } catch {
+        // localStorage unavailable — the debugger just won't find "you" later.
+      }
     }
   });
 }
@@ -74,6 +82,11 @@ function handleMessage(message) {
       if (message.valid) {
         hasUploadedRobot = true;
         readyButton.disabled = false;
+        try {
+          localStorage.setItem(MY_ROBOT_KEY, JSON.stringify(message.robot));
+        } catch {
+          // localStorage unavailable — the debugger just won't find your robot later.
+        }
         const banner = document.createElement('div');
         banner.className = 'banner success';
         banner.textContent = `"${message.robot.name}" uploaded.`;

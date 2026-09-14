@@ -9,12 +9,16 @@
 
 import JsonSocket from '../net/JsonSocket.js';
 import MatchHud from '../hud/MatchHud.js';
+import RobotDebugPanel from '../hud/RobotDebugPanel.js';
 import { muzzleFlash, hitSpark, explosion, showBanner, showCountdown } from '../effects.js';
+import { createRobotDebugger } from '../robotDebugger.js';
+import { MY_PLAYER_ID_KEY, MY_ROBOT_KEY } from '../robotDebuggerStorage.js';
 import { WS_URL } from '../config.js';
 
 const FACING_LENGTH = 26;
 const HEALTH_BAR_WIDTH = 40;
 const HEALTH_BAR_HEIGHT = 6;
+const MAX_DEBUG_DT = 0.2; // clamp so a backgrounded tab doesn't report a huge gap
 
 const STATUS_LABEL = {
   connecting: 'Connecting…',
@@ -29,6 +33,10 @@ export default class ArenaScene extends Phaser.Scene {
     this.robotViews = new Map();
     this.robotNames = new Map();
     this.projectileViews = new Map();
+    this.selectedRobotId = null;
+    this.myPlayerId = null;
+    this.myRobotDebugger = null;
+    this.lastDebugTickAt = null;
   }
 
   create() {
@@ -41,6 +49,8 @@ export default class ArenaScene extends Phaser.Scene {
       .setDepth(10);
 
     this.hud = new MatchHud(this);
+    this.debugPanel = new RobotDebugPanel(this);
+    this.loadOwnRobot();
 
     this.gameSocket = new JsonSocket(WS_URL, {
       onMessage: (message) => this.handleMessage(message),
@@ -49,6 +59,22 @@ export default class ArenaScene extends Phaser.Scene {
     this.gameSocket.connect();
 
     this.events.once('shutdown', () => this.gameSocket.disconnect());
+  }
+
+  loadOwnRobot() {
+    // Enables full debug info (target/rule/action) for whichever robot
+    // this browser uploaded via the Lobby — see robotDebugger.js for
+    // why that's the only robot this can ever work for.
+    try {
+      this.myPlayerId = localStorage.getItem(MY_PLAYER_ID_KEY);
+      const robotJson = localStorage.getItem(MY_ROBOT_KEY);
+      if (robotJson) {
+        this.myRobotDebugger = createRobotDebugger(JSON.parse(robotJson));
+      }
+    } catch {
+      // localStorage unavailable or corrupt — clicking your own robot
+      // will just show the same public-only info as anyone else's.
+    }
   }
 
   handleMessage(message) {
@@ -80,7 +106,8 @@ export default class ArenaScene extends Phaser.Scene {
   }
 
   applyState(state) {
-    (state.robots || []).forEach((robot) => this.upsertRobot(robot));
+    const robots = state.robots || [];
+    robots.forEach((robot) => this.upsertRobot(robot, robots));
     this.upsertProjectiles(state.projectiles || []);
     (state.events || []).forEach((event) => this.handleCombatEvent(event));
   }
@@ -103,20 +130,27 @@ export default class ArenaScene extends Phaser.Scene {
     }
   }
 
-  upsertRobot(robot) {
+  upsertRobot(robot, allRobots) {
     this.robotNames.set(robot.id, robot.name);
 
     let view = this.robotViews.get(robot.id);
     if (!view) {
-      view = this.createRobotView();
+      view = this.createRobotView(robot.id);
       this.robotViews.set(robot.id, view);
     }
     this.updateRobotView(view, robot);
+
+    if (this.selectedRobotId === robot.id) {
+      this.refreshDebugPanel(robot, allRobots);
+    }
   }
 
-  createRobotView() {
+  createRobotView(robotId) {
     const container = this.add.container(0, 0);
     const body = this.add.circle(0, 0, 18, 0x4fc3f7);
+    body.setInteractive({ useHandCursor: true });
+    body.on('pointerdown', () => this.onRobotClicked(robotId));
+
     const facing = this.add.graphics();
     const label = this.add
       .text(0, -34, '', { fontSize: '12px', color: '#e8edf2' })
@@ -131,6 +165,30 @@ export default class ArenaScene extends Phaser.Scene {
     container.add([body, facing, label, barBg, barFg]);
 
     return { container, body, facing, label, barFg };
+  }
+
+  onRobotClicked(robotId) {
+    if (this.selectedRobotId === robotId) {
+      this.selectedRobotId = null;
+      this.debugPanel.hide();
+      return;
+    }
+    this.selectedRobotId = robotId;
+    this.lastDebugTickAt = null;
+  }
+
+  refreshDebugPanel(robot, allRobots) {
+    if (robot.id === this.myPlayerId && this.myRobotDebugger) {
+      const now = performance.now();
+      const dt = this.lastDebugTickAt ? Math.min((now - this.lastDebugTickAt) / 1000, MAX_DEBUG_DT) : 0.05;
+      this.lastDebugTickAt = now;
+
+      const others = allRobots.filter((r) => r.id !== robot.id);
+      const debugInfo = this.myRobotDebugger.evaluate(robot, others, dt);
+      this.debugPanel.showOwnInfo(robot, debugInfo);
+    } else {
+      this.debugPanel.showPublicInfo(robot);
+    }
   }
 
   updateRobotView(view, robot) {
