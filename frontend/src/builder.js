@@ -1,10 +1,11 @@
-// Robot builder: name + 100-point stat allocator (docs/ARCHITECTURE.md #2).
+// Robot builder: name + 100-point stat allocator (docs/ARCHITECTURE.md #5)
+// plus the rule/variable/behaviour editor (docs/ARCHITECTURE.md #6).
 // Validation here is client-side only, to give instant feedback — the
-// server still re-validates on upload (separate backend issue), since
-// the server is always the source of truth for whether a robot is legal.
+// server still re-validates on upload, since the server is always the
+// source of truth for whether a robot is legal.
 
 import { BUILD_STATS as STATS, renderRobotCard } from './robotCard.js';
-import { createLogicEditor } from './logicEditor.js';
+import { createRobotProgramEditor } from './logicEditor.js';
 
 const TOTAL_BUILD_POINTS = 100;
 const STORAGE_KEY = 'botforge:saved-robots';
@@ -20,12 +21,16 @@ const savedListEl = document.getElementById('saved-robots-list');
 const saveButton = document.getElementById('save-button');
 const downloadButton = document.getElementById('download-button');
 const addRuleButton = document.getElementById('add-rule-button');
+const addVariableButton = document.getElementById('add-variable-button');
+const addBehaviourButton = document.getElementById('add-behaviour-button');
 
 const sliders = STATS.map((stat) => document.getElementById(`stat-${stat.key}`));
-const logicEditor = createLogicEditor(
-  document.getElementById('logic-rules'),
-  document.getElementById('logic-preview')
-);
+const programEditor = createRobotProgramEditor({
+  rulesEl: document.getElementById('logic-rules'),
+  variablesEl: document.getElementById('variables-list'),
+  behavioursEl: document.getElementById('behaviours-list'),
+  previewEl: document.getElementById('logic-preview'),
+});
 
 function currentBuild() {
   const build = {};
@@ -40,7 +45,16 @@ function totalPoints(build) {
 }
 
 function buildRobotPayload(name, creator, build) {
-  return { name, creator, version: DEFAULT_VERSION, build, logic: logicEditor.getLogic() };
+  const program = programEditor.getProgram();
+  return {
+    name,
+    creator,
+    version: DEFAULT_VERSION,
+    build,
+    logic: program.logic,
+    variables: program.variables,
+    behaviours: program.behaviours,
+  };
 }
 
 function renderPointsRemaining(total) {
@@ -115,7 +129,7 @@ function loadRobotIntoForm(robot) {
     sliders[i].value = robot.build[stat.key] ?? 0;
     document.getElementById(`${sliders[i].id}-value`).textContent = sliders[i].value;
   });
-  logicEditor.setLogic(robot.logic);
+  programEditor.setProgram({ logic: robot.logic, variables: robot.variables, behaviours: robot.behaviours });
   refresh();
 }
 
@@ -134,7 +148,9 @@ sliders.forEach((slider) => {
 
 nameInput.addEventListener('input', refresh);
 
-addRuleButton.addEventListener('click', () => logicEditor.addRule());
+addRuleButton.addEventListener('click', () => programEditor.addRule());
+addVariableButton.addEventListener('click', () => programEditor.addVariable());
+addBehaviourButton.addEventListener('click', () => programEditor.addBehaviour());
 
 creatorInput.addEventListener('input', () => {
   try {

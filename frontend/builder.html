@@ -88,10 +88,28 @@
           </div>
         </div>
 
+        <h2>Variables</h2>
+        <p class="hint">Named numbers you can reuse across conditions instead of repeating a value.</p>
+        <div id="variables-list"></div>
+        <div class="actions">
+          <button type="button" id="add-variable-button">Add variable</button>
+        </div>
+
+        <h2>Behaviours</h2>
+        <p class="hint">
+          Named, reusable sequences of 1-5 actions. Select one by name from a rule's THEN/ELSE
+          instead of repeating the same steps in multiple rules.
+        </p>
+        <div id="behaviours-list"></div>
+        <div class="actions">
+          <button type="button" id="add-behaviour-button">Add behaviour</button>
+        </div>
+
         <h2>Behaviour</h2>
         <p class="hint">
           Rules run top to bottom — the first one whose condition is true wins that tick. Order
-          matters: a robot that always attacks first will never reach a retreat rule below it.
+          matters: a robot that always attacks first will never reach a retreat rule below it. A
+          rule can check a second condition with AND/OR, and an ELSE action for when it doesn't match.
         </p>
         <div id="logic-rules"></div>
         <div class="actions">
