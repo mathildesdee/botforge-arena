@@ -76,6 +76,25 @@ def test_select_nearest_enemy_targets_closest_visible_robot():
     assert robot.target_id == "near"
 
 
+def test_select_nearest_enemy_retargets_even_when_a_farther_enemy_is_already_locked():
+    # Regression: select_nearest_enemy must recompute fresh from
+    # visible_enemies, not just reconfirm whatever's already locked in
+    # robot.target_id (the *sticky* current-enemy resolution exists so
+    # turn_toward_enemy etc. keep tracking a chosen target — but the
+    # "select_nearest_enemy" action itself must mean what it says).
+    robot = make_robot("r1", 0, 0, 0, logic=[
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": "select_nearest_enemy"},
+    ])
+    near = make_robot("near", 10, 0, 0, logic=[])
+    far = make_robot("far", 500, 0, 0, logic=[])
+    robot.target_id = "far"  # already locked onto the farther robot from an earlier tick
+
+    interpreter.decide_and_act(robot, [far, near], dt=0.1, arena_width=800, arena_height=600,
+                                fire_callback=lambda r: None)
+
+    assert robot.target_id == "near"
+
+
 def test_select_weakest_enemy_targets_lowest_health():
     robot = make_robot("r1", 0, 0, 0, logic=[
         {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": "select_weakest_enemy"},
