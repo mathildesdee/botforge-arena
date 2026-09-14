@@ -508,3 +508,41 @@ input[type='file'] {
   overflow-x: auto;
   white-space: pre;
 }
+
+.replay-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: #10151c;
+  border: 1px solid #2a3442;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.replay-item .replay-meta {
+  color: #7a8699;
+  font-size: 12px;
+}
+
+.replay-controls {
+  align-items: center;
+}
+
+.replay-controls input[type='range'] {
+  flex: 1;
+  min-width: 120px;
+}
+
+.replay-markers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.replay-markers button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BotForge Arena — Replays</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <nav>
+        <a href="index.html">Arena</a>
+        <a href="builder.html">Robot Builder</a>
+        <a href="upload.html">Upload Robot</a>
+        <a href="leaderboard.html">Leaderboard</a>
+        <a href="lobby.html">Lobby</a>
+        <a href="replay.html">Replays</a>
+      </nav>
+
+      <h1>Replays</h1>
+      <p class="hint">
+        Every round is recorded automatically — play one in the Lobby, then come back here to
+        watch it again.
+      </p>
+
+      <div id="replay-list-view">
+        <div id="replay-list"></div>
+      </div>
+
+      <div id="replay-viewer-view" hidden>
+        <div class="actions">
+          <button type="button" id="back-to-list-button">← Back to list</button>
+        </div>
+
+        <div class="arena-shell">
+          <div id="replay-arena"></div>
+        </div>
+
+        <div class="actions replay-controls">
+          <button type="button" id="play-pause-button" class="primary">Pause</button>
+          <input type="range" id="replay-scrubber" min="0" max="0" value="0" />
+          <span id="replay-position" class="robot-summary"></span>
+        </div>
+
+        <h2>Jump to</h2>
+        <div id="replay-markers" class="replay-markers"></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <script src="src/replay.js" type="module"></script>
+  </body>
+</html>
