@@ -546,3 +546,90 @@ input[type='file'] {
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+.sim-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.sim-slot {
+  flex: 1;
+  min-width: 220px;
+  padding: 14px;
+  background: #10151c;
+  border: 1px solid #2a3442;
+  border-radius: 8px;
+}
+
+.sim-slot h2 {
+  margin-top: 0;
+}
+
+.sim-slot select {
+  width: 100%;
+  box-sizing: border-box;
+  background: #1a2230;
+  border: 1px solid #2a3442;
+  border-radius: 4px;
+  color: #e8edf2;
+  font-size: 13px;
+  padding: 6px;
+}
+
+/* Win/loss/draw split — a part-to-whole stacked bar. Categorical
+   slots 1/2/3 from the dataviz skill's validated dark-mode palette,
+   used unmodified (pre-validated for CVD-safe adjacent contrast), in
+   fixed order: robot A, robot B, draws. */
+.viz-root {
+  --series-a: #3987e5;
+  --series-b: #d95926;
+  --series-draw: #199e70;
+  --viz-surface: #10151c;
+  --viz-text-secondary: #a9b4c2;
+  margin-top: 16px;
+}
+
+.sim-bar {
+  display: flex;
+  height: 20px;
+  gap: 2px;
+  background: var(--viz-surface);
+  margin-bottom: 12px;
+}
+
+.sim-bar-segment {
+  height: 100%;
+}
+
+.sim-bar-segment:first-child {
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+
+.sim-bar-segment:last-child {
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.sim-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--viz-text-secondary);
+}
+
+.sim-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sim-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}

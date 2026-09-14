@@ -6,9 +6,9 @@
 
 import { BUILD_STATS as STATS, renderRobotCard } from './robotCard.js';
 import { createRobotProgramEditor } from './logicEditor.js';
+import { loadSavedRobots, saveSavedRobots } from './savedRobotsStorage.js';
 
 const TOTAL_BUILD_POINTS = 100;
-const STORAGE_KEY = 'botforge:saved-robots';
 const CREATOR_STORAGE_KEY = 'botforge:creator-name';
 const DEFAULT_VERSION = 1;
 
@@ -62,23 +62,13 @@ function renderPointsRemaining(total) {
   pointsRemainingEl.textContent =
     remaining >= 0 ? `${remaining} points remaining` : `${-remaining} points over budget`;
   pointsRemainingEl.classList.toggle('over-budget', remaining < 0);
-  saveButton.disabled = remaining < 0 || !nameInput.value.trim() || !creatorInput.value.trim();
-}
-
-function loadSavedRobots() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-  } catch {
-    return [];
-  }
-}
-
-function saveSavedRobots(robots) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(robots));
-  } catch {
-    // localStorage unavailable (private mode, etc) — saving is best-effort only.
-  }
+  // The real backend requires build points to sum to *exactly* 100,
+  // not merely "100 or fewer" (found the hard way via /api/simulate
+  // rejecting an unspent-points robot) — gate both buttons on that,
+  // not just on overspending.
+  const invalid = remaining !== 0 || !nameInput.value.trim() || !creatorInput.value.trim();
+  saveButton.disabled = invalid;
+  downloadButton.disabled = invalid;
 }
 
 function renderSavedRobots() {
@@ -164,7 +154,7 @@ creatorInput.addEventListener('input', () => {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   const build = currentBuild();
-  if (totalPoints(build) > TOTAL_BUILD_POINTS || !nameInput.value.trim() || !creatorInput.value.trim()) {
+  if (totalPoints(build) !== TOTAL_BUILD_POINTS || !nameInput.value.trim() || !creatorInput.value.trim()) {
     return;
   }
   const robots = loadSavedRobots();

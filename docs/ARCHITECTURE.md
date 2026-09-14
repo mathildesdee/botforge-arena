@@ -167,7 +167,7 @@ Exactly 100 points total, distributed across:
 }
 ```
 
-Server rejects any build where the values sum to more than 100.
+Server rejects any build that doesn't sum to **exactly** 100 — under-spending is rejected too, not just going over (`backend/app/validation.py`'s `_validate_build`: `total != BUILD_POINT_TOTAL`). This line used to say "more than 100," which `builder.html`'s Save/Download gating matched — both only blocked going *over* budget, so a robot with unspent points would pass the builder's own check and then fail real validation. Found via a live `/api/simulate` call while fixing an unrelated test fixture typo.
 
 ## 6. Robot program (uploaded JSON)
 

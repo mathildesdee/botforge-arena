@@ -16,3 +16,6 @@ export const LEADERBOARD_URL = 'http://localhost:8000/api/leaderboard';
 // See docs/ARCHITECTURE.md #9. Append '/<round_result_id>' for one
 // full recording.
 export const REPLAYS_URL = 'http://localhost:8000/api/replays';
+
+// See docs/ARCHITECTURE.md #10.
+export const SIMULATE_URL = 'http://localhost:8000/api/simulate';

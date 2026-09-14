@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BotForge Arena — Simulate</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <nav>
+        <a href="index.html">Arena</a>
+        <a href="builder.html">Robot Builder</a>
+        <a href="upload.html">Upload Robot</a>
+        <a href="leaderboard.html">Leaderboard</a>
+        <a href="lobby.html">Lobby</a>
+        <a href="replay.html">Replays</a>
+        <a href="simulate.html">Simulate</a>
+      </nav>
+
+      <h1>Simulate</h1>
+      <p class="hint">
+        Run two robots against each other many times, fast, with no animation — is my robot
+        smarter now? Pick a robot you saved in the Builder, or upload a JSON file, for each side.
+      </p>
+
+      <div class="sim-slots">
+        <div class="sim-slot">
+          <h2>Robot A</h2>
+          <div class="field">
+            <label for="robot-a-select">Saved robot</label>
+            <select id="robot-a-select">
+              <option value="">— none —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="robot-a-file">Or upload a file</label>
+            <input type="file" id="robot-a-file" accept="application/json,.json" />
+          </div>
+          <p class="robot-summary" id="robot-a-summary">No robot selected.</p>
+        </div>
+
+        <div class="sim-slot">
+          <h2>Robot B</h2>
+          <div class="field">
+            <label for="robot-b-select">Saved robot</label>
+            <select id="robot-b-select">
+              <option value="">— none —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="robot-b-file">Or upload a file</label>
+            <input type="file" id="robot-b-file" accept="application/json,.json" />
+          </div>
+          <p class="robot-summary" id="robot-b-summary">No robot selected.</p>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="rounds-input">Rounds</label>
+        <input type="number" id="rounds-input" value="100" min="1" max="2000" style="width: 120px" />
+      </div>
+
+      <div class="actions">
+        <button type="button" id="run-button" class="primary" disabled>Run simulation</button>
+      </div>
+
+      <div id="sim-result"></div>
+    </div>
+
+    <script src="src/simulate.js" type="module"></script>
+  </body>
+</html>
