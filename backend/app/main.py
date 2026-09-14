@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import time
 
@@ -7,12 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from . import db
+from .arena import ARENA_HEIGHT, ARENA_WIDTH, Arena
 from .lobby import Lobby
 from .match import DEFAULT_NUM_ROUNDS, DEFAULT_ROUND_TIME_LIMIT, Match
 from .replay import Recorder
-from .robot import Robot
+from .robot import BUILD_STATS, MOVE_ENERGY_COST_PER_SECOND, Robot, TURN_ENERGY_COST_PER_SECOND
 from .tournament import Participant, Tournament
-from .validation import validate_robot_json
+from .validation import BUILD_POINT_TOTAL, validate_robot_json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("botforge.main")
@@ -42,6 +44,14 @@ lobby = Lobby()
 activity_in_progress = False  # a match or tournament currently owns the arena
 
 MAX_SIMULATE_ROUNDS = 2000
+
+# Practice mode (manual keyboard control, outside the match/lobby system):
+# a build with no particular strategic lean, used when the player hasn't
+# picked one of their own saved robots to drive.
+DEFAULT_PRACTICE_BUILD = {
+    "speed": 25, "armor": 15, "weapon_power": 10,
+    "accuracy": 10, "fire_rate": 10, "sensor_range": 30,
+}
 
 
 @app.get("/health")
@@ -119,6 +129,89 @@ async def simulate(request: SimulateRequest):
         "wins": {"robot_a": counts["robot_a"], "robot_b": counts["robot_b"]},
         "draws": counts["draws"],
     }
+
+
+def _valid_practice_build(candidate):
+    return (
+        isinstance(candidate, dict)
+        and set(candidate) == set(BUILD_STATS)
+        and all(isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0 for v in candidate.values())
+        and sum(candidate.values()) == BUILD_POINT_TOTAL
+    )
+
+
+def _apply_practice_input(robot, keys_held, dt, arena_width, arena_height):
+    """Arrow-key movement for practice mode: up/down drive forward/backward
+    along the robot's current facing, left/right turn — the same primitives
+    and energy costs interpreter.py uses for the equivalent logic actions,
+    just triggered by held keys instead of a rule matching."""
+    if keys_held["up"] and robot.try_consume_energy(MOVE_ENERGY_COST_PER_SECOND * dt):
+        robot.move_forward(dt, arena_width, arena_height)
+    elif keys_held["down"] and robot.try_consume_energy(MOVE_ENERGY_COST_PER_SECOND * dt):
+        robot.move_backward(dt, arena_width, arena_height)
+
+    if keys_held["left"] and robot.try_consume_energy(TURN_ENERGY_COST_PER_SECOND * dt):
+        robot.turn_left(dt)
+    elif keys_held["right"] and robot.try_consume_energy(TURN_ENERGY_COST_PER_SECOND * dt):
+        robot.turn_right(dt)
+
+
+@app.websocket("/ws/practice")
+async def practice_endpoint(websocket: WebSocket):
+    """Manual practice mode: one player drives one robot directly with the
+    keyboard (frontend/src/scenes/PracticeScene.js) to get a feel for a
+    build's speed/turn rate — no combat, no lobby membership, nothing
+    persisted. Separate from /ws's match/lobby protocol entirely, since a
+    practice session is a single connection driving its own private arena.
+
+    The client may send one {"type": "init", "build": {...}} message right
+    after connecting to practice with one of its own saved builds instead
+    of the default; anything else (or nothing within 5s) keeps the default.
+    After that, {"type": "input", "up"/"down"/"left"/"right": bool} messages
+    report which keys are currently held.
+    """
+    await websocket.accept()
+
+    build = DEFAULT_PRACTICE_BUILD
+    try:
+        init_message = await asyncio.wait_for(websocket.receive_json(), timeout=5.0)
+        if isinstance(init_message, dict) and _valid_practice_build(init_message.get("build")):
+            build = init_message["build"]
+    except (asyncio.TimeoutError, ValueError, WebSocketDisconnect):
+        pass
+
+    robot = Robot("practice", "You", x=ARENA_WIDTH / 2, y=ARENA_HEIGHT / 2, direction=0.0, build=build)
+    arena = Arena([robot])
+    keys_held = {"up": False, "down": False, "left": False, "right": False}
+
+    async def read_inputs():
+        try:
+            while True:
+                message = await websocket.receive_json()
+                if isinstance(message, dict) and message.get("type") == "input":
+                    for key in keys_held:
+                        if key in message:
+                            keys_held[key] = bool(message[key])
+        except (WebSocketDisconnect, ValueError):
+            pass
+
+    reader_task = asyncio.create_task(read_inputs())
+    try:
+        while True:
+            start = time.perf_counter()
+            robot.tick_cooldowns(DT)
+            robot.regenerate_energy(DT)
+            _apply_practice_input(robot, keys_held, DT, arena.width, arena.height)
+            arena.tick_count += 1
+            await websocket.send_json(arena.state())
+            elapsed = time.perf_counter() - start
+            await asyncio.sleep(max(0.0, DT - elapsed))
+    except Exception:
+        pass  # covers WebSocketDisconnect and a send on an already-closed socket
+    finally:
+        reader_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reader_task
 
 
 @app.websocket("/ws")

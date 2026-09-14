@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BotForge Arena — Practice</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <nav>
+        <a href="index.html">Arena</a>
+        <a href="builder.html">Robot Builder</a>
+        <a href="upload.html">Upload Robot</a>
+        <a href="leaderboard.html">Leaderboard</a>
+        <a href="lobby.html">Lobby</a>
+        <a href="replay.html">Replays</a>
+        <a href="simulate.html">Simulate</a>
+        <a href="practice.html">Practice</a>
+      </nav>
+
+      <h1>Practice</h1>
+      <p class="hint">
+        Drive one robot yourself with the arrow keys — ↑ / ↓ to move forward/backward, ← / → to turn — to
+        get a feel for a build's speed and turn rate. No combat, no opponent, nothing recorded.
+      </p>
+
+      <div class="field">
+        <label for="practice-robot-select">Robot build</label>
+        <select id="practice-robot-select">
+          <option value="">Default balanced build</option>
+        </select>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="practice-start-button" class="primary">Start practice</button>
+      </div>
+
+      <div class="arena-shell">
+        <div id="arena"></div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <script src="src/practiceMain.js" type="module"></script>
+  </body>
+</html>
