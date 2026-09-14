@@ -54,3 +54,25 @@ def test_movement_updates_position_and_direction_correctly():
     # Backward motion at heading 0 moves in -x, without changing the facing direction.
     assert robot.x < x_before_backward
     assert robot.direction == 0.0
+
+
+def test_energy_regenerates_up_to_the_cap():
+    robot = make_robot()
+    robot.energy = 50.0
+    robot.regenerate_energy(dt=1.0)
+    assert robot.energy == 58.0  # ENERGY_REGEN_PER_SECOND = 8.0
+
+    robot.energy = robot.max_energy - 1.0
+    robot.regenerate_energy(dt=10.0)
+    assert robot.energy == robot.max_energy  # never exceeds the cap
+
+
+def test_try_consume_energy_succeeds_and_fails_appropriately():
+    robot = make_robot()
+    robot.energy = 10.0
+
+    assert robot.try_consume_energy(6.0) is True
+    assert robot.energy == 4.0
+
+    assert robot.try_consume_energy(6.0) is False
+    assert robot.energy == 4.0  # unchanged when there wasn't enough

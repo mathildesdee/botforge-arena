@@ -9,6 +9,7 @@ import random
 
 from . import combat
 from . import interpreter
+from .robot import SHOOT_ENERGY_COST
 
 ARENA_WIDTH = 800
 ARENA_HEIGHT = 600
@@ -49,10 +50,13 @@ class Arena:
             if not robot.alive:
                 continue
             robot.tick_cooldowns(dt)
+            robot.regenerate_energy(dt)
             visible_enemies = self._visible_enemies(robot)
 
             def fire(shooter):
                 if shooter.fire_cooldown_remaining > 0:
+                    return
+                if not shooter.try_consume_energy(SHOOT_ENERGY_COST):
                     return
                 self.projectiles.append(combat.spawn_projectile(shooter))
                 shooter.fire_cooldown_remaining = shooter.fire_cooldown

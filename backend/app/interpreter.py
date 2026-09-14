@@ -14,6 +14,7 @@ WebSocket loop.
 import logging
 
 from .combat import distance
+from .robot import MOVE_ENERGY_COST_PER_SECOND, SCAN_ENERGY_COST, TURN_ENERGY_COST_PER_SECOND
 
 logger = logging.getLogger("botforge.interpreter")
 
@@ -125,23 +126,30 @@ def _resolve(value, context):
 
 
 def _perform(action, robot, enemy, visible_enemies, dt, arena_width, arena_height, fire_callback):
+    # Movement, turning, scanning, and shooting cost energy (PDF section
+    # 24) — insufficient energy means the action simply doesn't happen
+    # this tick, same as a weapon still on cooldown.
     if action == "move_forward":
-        robot.move_forward(dt, arena_width, arena_height)
+        if robot.try_consume_energy(MOVE_ENERGY_COST_PER_SECOND * dt):
+            robot.move_forward(dt, arena_width, arena_height)
     elif action == "move_backward":
-        robot.move_backward(dt, arena_width, arena_height)
+        if robot.try_consume_energy(MOVE_ENERGY_COST_PER_SECOND * dt):
+            robot.move_backward(dt, arena_width, arena_height)
     elif action == "turn_left":
-        robot.turn_left(dt)
+        if robot.try_consume_energy(TURN_ENERGY_COST_PER_SECOND * dt):
+            robot.turn_left(dt)
     elif action == "turn_right":
-        robot.turn_right(dt)
+        if robot.try_consume_energy(TURN_ENERGY_COST_PER_SECOND * dt):
+            robot.turn_right(dt)
     elif action == "turn_toward_enemy":
-        if enemy is not None:
+        if enemy is not None and robot.try_consume_energy(TURN_ENERGY_COST_PER_SECOND * dt):
             robot.turn_toward(enemy.x, enemy.y, dt)
     elif action == "move_toward_enemy":
-        if enemy is not None:
+        if enemy is not None and robot.try_consume_energy(MOVE_ENERGY_COST_PER_SECOND * dt):
             robot.turn_toward(enemy.x, enemy.y, dt)
             robot.move_forward(dt, arena_width, arena_height)
     elif action == "move_away_from_enemy":
-        if enemy is not None:
+        if enemy is not None and robot.try_consume_energy(MOVE_ENERGY_COST_PER_SECOND * dt):
             robot.turn_toward(enemy.x, enemy.y, dt)
             robot.move_backward(dt, arena_width, arena_height)
     elif action == "shoot":
@@ -150,7 +158,9 @@ def _perform(action, robot, enemy, visible_enemies, dt, arena_width, arena_heigh
         robot.target_id = enemy.id if enemy is not None else None
     elif action == "select_weakest_enemy":
         robot.target_id = min(visible_enemies, key=lambda r: r.health_pct()).id if visible_enemies else None
-    elif action in ("wait", "scan"):
+    elif action == "scan":
+        robot.try_consume_energy(SCAN_ENERGY_COST)
+    elif action == "wait":
         pass
     else:
         logger.warning("Robot %s: unrecognized action %r ignored.", robot.id, action)

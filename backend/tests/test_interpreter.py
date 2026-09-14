@@ -108,3 +108,26 @@ def test_no_enemy_visible_makes_enemy_conditions_false():
     action = interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
                                          fire_callback=lambda r: None)
     assert action == "wait"
+
+
+def test_move_forward_is_blocked_when_energy_depleted():
+    robot = make_robot("r1", 100, 100, 0, logic=[
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": "move_forward"},
+    ])
+    robot.energy = 0.0
+    interpreter.decide_and_act(robot, [], dt=1.0, arena_width=800, arena_height=600,
+                                fire_callback=lambda r: None)
+    assert robot.x == 100  # no energy, so the move never happens
+
+
+def test_shoot_always_invokes_fire_callback_regardless_of_energy():
+    # The interpreter itself doesn't gate "shoot" on energy — that's the
+    # fire callback's job (see test_arena.py), same as the cooldown check.
+    robot = make_robot("r1", 0, 0, 0, logic=[
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": "shoot"},
+    ])
+    robot.energy = 0.0
+    fired = []
+    interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
+                                fire_callback=lambda r: fired.append(r.id))
+    assert fired == ["r1"]

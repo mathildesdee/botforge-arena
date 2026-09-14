@@ -24,6 +24,15 @@ TURN_DEGREES_PER_SECOND = 90.0
 
 ARENA_MARGIN = 20.0
 
+# Energy (PDF section 24): movement/scanning/shooting drain it, it slowly
+# regenerates, and running dry blocks further action until it recovers —
+# so a robot that scans and shoots nonstop can talk itself into a corner.
+ENERGY_REGEN_PER_SECOND = 8.0
+MOVE_ENERGY_COST_PER_SECOND = 6.0
+TURN_ENERGY_COST_PER_SECOND = 2.0
+SCAN_ENERGY_COST = 3.0
+SHOOT_ENERGY_COST = 8.0
+
 
 class Robot:
     def __init__(self, robot_id, name, x, y, direction, build, logic=None):
@@ -73,6 +82,19 @@ class Robot:
 
     def tick_cooldowns(self, dt):
         self.fire_cooldown_remaining = max(0.0, self.fire_cooldown_remaining - dt)
+
+    def regenerate_energy(self, dt):
+        self.energy = min(self.max_energy, self.energy + ENERGY_REGEN_PER_SECOND * dt)
+
+    def try_consume_energy(self, amount):
+        """Deducts `amount` energy and returns True if there was enough;
+        otherwise leaves energy untouched and returns False — the caller
+        (the interpreter) treats a False result as the action failing to
+        execute this tick."""
+        if self.energy < amount:
+            return False
+        self.energy -= amount
+        return True
 
     def move_forward(self, dt, arena_width, arena_height):
         self._move(self.direction, dt, arena_width, arena_height)
