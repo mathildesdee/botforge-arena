@@ -17,22 +17,14 @@
 
       <h1>Lobby</h1>
       <p class="hint">
-        Choose a name, upload a robot, and mark yourself ready. Once everyone in the lobby is
-        ready, the match starts and you can watch it together in the Arena.
+        Choose a name, join, then upload a robot and mark yourself ready. Once 2-8 players are
+        ready, anyone can start the match — everyone connected watches it together in the Arena.
       </p>
 
       <div id="join-form">
         <div class="field">
           <label for="player-name">Your name</label>
           <input type="text" id="player-name" maxlength="24" placeholder="Alice" required />
-        </div>
-
-        <div class="field">
-          <label for="robot-file">Robot JSON file</label>
-          <input type="file" id="robot-file" accept="application/json,.json" />
-          <p class="robot-summary" id="robot-summary">
-            No robot selected yet — export one from the Robot Builder first.
-          </p>
         </div>
 
         <div class="actions">
@@ -45,8 +37,20 @@
       <div id="lobby-room" hidden>
         <p id="lobby-status" class="hint"></p>
 
+        <div class="field">
+          <label for="robot-file">Robot JSON file</label>
+          <input type="file" id="robot-file" accept="application/json,.json" />
+          <p class="robot-summary" id="robot-summary">
+            Export one from the Robot Builder, or write your own matching
+            docs/ARCHITECTURE.md #5.
+          </p>
+        </div>
+
+        <div id="robot-upload-result"></div>
+
         <div class="actions">
-          <button type="button" id="ready-button" class="primary">Mark ready</button>
+          <button type="button" id="ready-button" class="primary" disabled>Mark ready</button>
+          <button type="button" id="start-button">Start match</button>
           <button type="button" id="leave-button">Leave lobby</button>
         </div>
 

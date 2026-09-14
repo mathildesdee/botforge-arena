@@ -62,14 +62,18 @@ These share the connection with `game_state` but arrive far less often — on ro
 { "type": "error", "message": "Logic execution limit reached", "robot_id": "robot_2" }
 ```
 
-## 3. Multiplayer lobby protocol (separate WebSocket endpoint)
+## 3. Multiplayer lobby protocol (same `/ws` endpoint as game_state)
 
-A different endpoint from `game_state` — the lobby is where players gather, name themselves, and attach a robot *before* a match's game loop exists at all. Milestone 6.
+Milestone 6. Unlike the first draft of this section, the lobby is **not** a separate endpoint — every WebSocket connection to `/ws` is a lobby member (and a spectator once a match is running) from the moment it connects, before it even sends `join`. This is the real, implemented, and integration-tested protocol — build against this, not against the mock scripts that predate it.
 
 Client → server:
 
 ```json
-{ "type": "join", "name": "Alice", "robot_name": "Hunter V3" }
+{ "type": "join", "name": "Alice" }
+```
+
+```json
+{ "type": "upload_robot", "robot": { "...": "a full robot program, section 5" } }
 ```
 
 ```json
@@ -77,35 +81,46 @@ Client → server:
 ```
 
 ```json
-{ "type": "leave" }
+{ "type": "start_match" }
 ```
 
-Server → client, sent once to a client right after their `join` is accepted, so they know which row in future `lobby_state` broadcasts is their own:
+There is no `leave` message — a player leaves by closing the WebSocket connection; the server detects the disconnect and removes them.
 
-```json
-{ "type": "joined", "id": "p1" }
-```
-
-Server → client, broadcast to everyone in the lobby whenever membership or readiness changes:
+Server → client, broadcast to every connected socket whenever membership, names, robots, or readiness change:
 
 ```json
 {
   "type": "lobby_state",
   "players": [
-    { "id": "p1", "name": "Alice", "robot_name": "Hunter V3", "ready": true },
-    { "id": "p2", "name": "Bob", "robot_name": "Tank MK2", "ready": false }
+    { "id": "player_1", "name": "Alice", "ready": true, "has_robot": true },
+    { "id": "player_2", "name": "Bob", "ready": false, "has_robot": false }
   ]
 }
 ```
 
-Once every connected player is marked ready (minimum 2 players):
+- There is no server-assigned "this is you" message — a client identifies its own row by matching the `name` it sent in `join`. Two players picking the same name is an unhandled edge case for now.
+- `has_robot` is a boolean, not a robot name — other players' robot details aren't exposed in the lobby.
+- `set_ready: true` is silently downgraded to `false` server-side if the player has no uploaded robot yet.
+
+Server → client, sent only to the uploader, in direct response to `upload_robot`:
 
 ```json
-{ "type": "match_starting", "countdown": 3 }
+{ "type": "robot_upload_result", "valid": true, "robot": { "...": "..." } }
 ```
 
-- The lobby only tracks `robot_name` as a label, not the full uploaded program — the actual robot JSON still goes through the validation endpoint (section 6) independently.
-- After `match_starting`, real matches hand off to the `game_state` WebSocket (section 1); until the backend loop exists, the frontend just links players to the arena page to spectate together.
+```json
+{ "type": "robot_upload_result", "valid": false, "errors": [{ "field": "creator", "message": "Missing required field 'creator'." }] }
+```
+
+Same error shape as the validation endpoint (section 6) — `upload_robot` runs the exact same validator.
+
+Server → client, sent only to whoever requested `start_match`, if it's rejected (needs 2-8 ready players, one match at a time):
+
+```json
+{ "type": "lobby_error", "message": "Need 2-8 ready players (with an uploaded robot each) to start." }
+```
+
+On success, `start_match` triggers the match lifecycle messages (section 2) and `game_state` (section 1), broadcast to every connected socket — players and spectators alike, which is how "spectate together" works: anyone with the page open sees the match, not just the players who readied up.
 
 ## 4. Robot build (hardware points)
 
@@ -147,6 +162,7 @@ Server rejects any build where the values sum to more than 100.
 }
 ```
 
+- `name`, `creator`, and `build` are required fields — the real validator rejects a robot missing any of them (found by integration-testing the lobby: `builder.html`/`upload.html` don't currently send `creator` at all, since neither page has a concept of "current player name" yet — a known gap, not fixed as part of Milestone 6).
 - `logic` rules run in ascending `priority` order; the first matching rule wins for that tick.
 - Allowed comparison ops: `lt`, `gt`, `eq`, `neq`, `and`, `or`, `not`.
 - Allowed actions (stage 1): `move_forward`, `move_backward`, `turn_left`, `turn_right`, `turn_toward_enemy`, `move_toward_enemy`, `move_away_from_enemy`, `shoot`, `select_nearest_enemy`, `select_weakest_enemy`, `wait`, `scan`.

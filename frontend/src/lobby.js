@@ -1,52 +1,39 @@
-// Multiplayer lobby (Milestone 6): pick a name, attach a robot,
-// mark ready, watch everyone else do the same, then move to
-// spectating the match together. Protocol is docs/ARCHITECTURE.md #3
-// — a separate WebSocket connection from the arena's game_state feed.
+// Multiplayer lobby (Milestone 6): pick a name, upload a robot, mark
+// ready, watch everyone else do the same, then move to spectating the
+// match together. Protocol is docs/ARCHITECTURE.md #3 — verified
+// against the real backend (backend/app/main.py + lobby.py), not a
+// mock. Notably: it's the *same* /ws connection the arena page uses,
+// there's no separate "lobby endpoint", and there's no server-issued
+// "this is you" id — a client recognizes its own row by the name it
+// sent in `join`.
 
 import JsonSocket from './net/JsonSocket.js';
+import { renderRobotCard } from './robotCard.js';
 import { readRobotFile } from './robotFile.js';
-import { LOBBY_WS_URL } from './config.js';
+import { WS_URL } from './config.js';
 
 const nameInput = document.getElementById('player-name');
 const fileInput = document.getElementById('robot-file');
-const robotSummaryEl = document.getElementById('robot-summary');
 const joinButton = document.getElementById('join-button');
 const joinErrorEl = document.getElementById('join-error');
 const joinFormEl = document.getElementById('join-form');
 
 const lobbyRoomEl = document.getElementById('lobby-room');
 const lobbyStatusEl = document.getElementById('lobby-status');
+const robotUploadResultEl = document.getElementById('robot-upload-result');
 const readyButton = document.getElementById('ready-button');
+const startButton = document.getElementById('start-button');
 const leaveButton = document.getElementById('leave-button');
 const playersEl = document.getElementById('lobby-players');
 
-let selectedRobot = null;
 let socket = null;
-let myPlayerId = null;
+let myName = null;
+let hasUploadedRobot = false;
 let isReady = false;
-let hasJoined = false;
 
 function refreshJoinButton() {
-  joinButton.disabled = !nameInput.value.trim() || !selectedRobot;
+  joinButton.disabled = !nameInput.value.trim();
 }
-
-fileInput.addEventListener('change', async () => {
-  const file = fileInput.files[0];
-  if (!file) return;
-
-  try {
-    const robot = await readRobotFile(file);
-    if (!robot.name) {
-      throw new Error('missing "name" field');
-    }
-    selectedRobot = robot;
-    robotSummaryEl.textContent = `"${robot.name}" selected.`;
-  } catch (err) {
-    selectedRobot = null;
-    robotSummaryEl.textContent = `Could not use this file: ${err.message}`;
-  }
-  refreshJoinButton();
-});
 
 nameInput.addEventListener('input', refreshJoinButton);
 
@@ -56,9 +43,11 @@ function renderPlayers(players) {
     const row = document.createElement('div');
     row.className = 'lobby-player';
 
+    const you = player.name === myName ? ' (you)' : '';
     const info = document.createElement('div');
-    const you = player.id === myPlayerId ? ' (you)' : '';
-    info.innerHTML = `<strong>${player.name}${you}</strong><br><span class="lobby-player-robot">${player.robot_name}</span>`;
+    info.innerHTML = `<strong>${player.name}${you}</strong><br><span class="lobby-player-robot">${
+      player.has_robot ? 'Robot ready' : 'No robot yet'
+    }</span>`;
 
     const badge = document.createElement('span');
     badge.className = `ready-badge${player.ready ? ' is-ready' : ''}`;
@@ -67,53 +56,100 @@ function renderPlayers(players) {
     row.append(info, badge);
     playersEl.appendChild(row);
 
-    if (player.id === myPlayerId) {
+    if (player.name === myName) {
       isReady = player.ready;
       readyButton.textContent = isReady ? 'Cancel ready' : 'Mark ready';
+      readyButton.disabled = !hasUploadedRobot;
     }
   });
 }
 
 function handleMessage(message) {
   switch (message.type) {
-    case 'joined':
-      myPlayerId = message.id;
-      break;
     case 'lobby_state':
       renderPlayers(message.players);
-      lobbyStatusEl.textContent = `${message.players.length} player(s) in lobby. Waiting for everyone to be ready (minimum 2 players).`;
       break;
-    case 'match_starting':
-      lobbyStatusEl.innerHTML = `Match starting in ${message.countdown}s — <a href="index.html">go watch in the Arena</a>.`;
+    case 'robot_upload_result':
+      robotUploadResultEl.innerHTML = '';
+      if (message.valid) {
+        hasUploadedRobot = true;
+        readyButton.disabled = false;
+        const banner = document.createElement('div');
+        banner.className = 'banner success';
+        banner.textContent = `"${message.robot.name}" uploaded.`;
+        robotUploadResultEl.appendChild(banner);
+        const card = document.createElement('div');
+        card.className = 'robot-card';
+        robotUploadResultEl.appendChild(card);
+        renderRobotCard(card, 'Stats', message.robot.build || {});
+      } else {
+        hasUploadedRobot = false;
+        readyButton.disabled = true;
+        const banner = document.createElement('div');
+        banner.className = 'banner error';
+        banner.textContent = 'This robot was rejected:';
+        const list = document.createElement('ul');
+        list.className = 'error-list';
+        (message.errors || []).forEach((err) => {
+          const item = document.createElement('li');
+          item.className = 'error-item';
+          item.innerHTML = `<code>${err.field ?? '(general)'}</code> — ${err.message}`;
+          list.appendChild(item);
+        });
+        banner.appendChild(list);
+        robotUploadResultEl.appendChild(banner);
+      }
+      break;
+    case 'lobby_error':
+      lobbyStatusEl.textContent = message.message;
+      break;
+    case 'match_start':
+      lobbyStatusEl.innerHTML = `Match starting (${message.total_rounds} rounds) — <a href="index.html">go watch in the Arena</a>.`;
       readyButton.disabled = true;
-      leaveButton.disabled = true;
+      startButton.disabled = true;
       break;
     default:
+      // round_start/game_state/round_end/match_end all belong to the
+      // arena page once a match is running — the lobby only cares
+      // about match_start as the cue to point players there.
       break;
   }
 }
 
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  if (!file || !socket) return;
+
+  let robot;
+  try {
+    robot = await readRobotFile(file);
+  } catch (err) {
+    robotUploadResultEl.innerHTML = `<div class="banner error">Could not parse this file as JSON: ${err.message}</div>`;
+    return;
+  }
+
+  // Attach the player's chosen name as the robot's creator — the
+  // real validator requires it and neither the file nor the builder
+  // page has a "current player" concept to supply it from elsewhere.
+  socket.send({ type: 'upload_robot', robot: { ...robot, creator: myName } });
+});
+
 joinButton.addEventListener('click', () => {
   joinErrorEl.textContent = '';
-  socket = new JsonSocket(LOBBY_WS_URL, {
+  myName = nameInput.value.trim();
+
+  socket = new JsonSocket(WS_URL, {
     onMessage: handleMessage,
     onStatusChange: (status) => {
-      if (status === 'connected' && !hasJoined) {
-        hasJoined = true;
-        socket.send({
-          type: 'join',
-          name: nameInput.value.trim(),
-          robot_name: selectedRobot.name,
-        });
+      if (status === 'connected') {
+        socket.send({ type: 'join', name: myName });
         joinFormEl.hidden = true;
         lobbyRoomEl.hidden = false;
-        lobbyStatusEl.textContent = `Connected as ${nameInput.value.trim()}.`;
-      } else if (status === 'error' || status === 'disconnected') {
-        if (!hasJoined) {
-          joinErrorEl.textContent = `Could not reach the lobby server at ${LOBBY_WS_URL}. Is it running?`;
-        } else {
-          lobbyStatusEl.textContent = 'Disconnected from lobby — retrying…';
-        }
+        lobbyStatusEl.textContent = `Connected as ${myName}. Upload a robot to be able to ready up.`;
+      } else if (status === 'error') {
+        joinErrorEl.textContent = `Could not reach the backend at ${WS_URL}. Is it running?`;
+      } else if (status === 'disconnected' && !lobbyRoomEl.hidden) {
+        lobbyStatusEl.textContent = 'Disconnected — retrying…';
       }
     },
   });
@@ -124,14 +160,22 @@ readyButton.addEventListener('click', () => {
   socket.send({ type: 'set_ready', ready: !isReady });
 });
 
+startButton.addEventListener('click', () => {
+  socket.send({ type: 'start_match' });
+});
+
 leaveButton.addEventListener('click', () => {
-  socket.send({ type: 'leave' });
+  // No "leave" message in the real protocol — closing the connection
+  // is how the server notices you've gone.
   socket.disconnect();
   socket = null;
-  hasJoined = false;
-  myPlayerId = null;
+  myName = null;
+  hasUploadedRobot = false;
+  isReady = false;
   joinFormEl.hidden = false;
   lobbyRoomEl.hidden = true;
+  robotUploadResultEl.innerHTML = '';
+  fileInput.value = '';
   readyButton.disabled = false;
-  leaveButton.disabled = false;
+  startButton.disabled = false;
 });
