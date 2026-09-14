@@ -109,3 +109,28 @@ class Match:
             "ranking": [{"robot_id": rid, "points": pts} for rid, pts in ranking],
             "rounds": [r.to_dict() for r in self.round_results],
         }
+
+    def run_to_completion(self, dt):
+        """Drives every remaining round to completion without any
+        real-time pacing — for headless bulk simulation (PDF section 29,
+        "Simulation mode") or tests."""
+        while not self.finished:
+            self.start_round()
+            while True:
+                result = self.tick(dt)
+                if result["round_result"] is not None:
+                    break
+        return self.final_result()
+
+    def round_win_counts(self):
+        """{robot_id: rounds that robot won} plus a "draws" count for
+        rounds with no single winner (survival draw or mutual
+        destruction) — the tally "Simulation mode" reports."""
+        counts = {r.id: 0 for r in self.arena.robots}
+        counts["draws"] = 0
+        for round_result in self.round_results:
+            if round_result.winner_id is not None:
+                counts[round_result.winner_id] += 1
+            else:
+                counts["draws"] += 1
+        return counts

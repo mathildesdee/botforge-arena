@@ -3,6 +3,7 @@ import logging
 import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
 from . import db
 from .lobby import Lobby
@@ -22,6 +23,8 @@ db.init_db()
 
 lobby = Lobby()
 activity_in_progress = False  # a match or tournament currently owns the arena
+
+MAX_SIMULATE_ROUNDS = 2000
 
 
 @app.get("/health")
@@ -43,6 +46,43 @@ def validate_robot(robot: dict):
 @app.get("/api/leaderboard")
 def leaderboard():
     return db.get_leaderboard()
+
+
+class SimulateRequest(BaseModel):
+    robot_a: dict
+    robot_b: dict
+    rounds: int = 100
+
+
+@app.post("/api/simulate")
+async def simulate(request: SimulateRequest):
+    """Fast headless simulation (PDF section 29, "Simulation mode"):
+    plays many rounds between two robot definitions with no real-time
+    pacing and no live broadcast, and reports a win/draw tally — so a
+    player can compare two robot versions statistically instead of
+    watching each one play out live. Stateless: nothing is persisted."""
+    for label, robot_definition in (("robot_a", request.robot_a), ("robot_b", request.robot_b)):
+        is_valid, errors = validate_robot_json(robot_definition)
+        if not is_valid:
+            return {"valid": False, "field": label, "errors": errors}
+
+    rounds = max(1, min(request.rounds, MAX_SIMULATE_ROUNDS))
+    robots = [
+        Robot("robot_a", request.robot_a["name"], x=0, y=0, direction=0,
+              build=request.robot_a["build"], logic=request.robot_a["logic"]),
+        Robot("robot_b", request.robot_b["name"], x=0, y=0, direction=0,
+              build=request.robot_b["build"], logic=request.robot_b["logic"]),
+    ]
+    match = Match(robots, num_rounds=rounds, round_time_limit=DEFAULT_ROUND_TIME_LIMIT)
+    await asyncio.to_thread(match.run_to_completion, DT)
+
+    counts = match.round_win_counts()
+    return {
+        "valid": True,
+        "rounds_played": len(match.round_results),
+        "wins": {"robot_a": counts["robot_a"], "robot_b": counts["robot_b"]},
+        "draws": counts["draws"],
+    }
 
 
 @app.websocket("/ws")
