@@ -162,7 +162,7 @@ Server rejects any build where the values sum to more than 100.
 }
 ```
 
-- `name`, `creator`, and `build` are required fields — the real validator rejects a robot missing any of them (found by integration-testing the lobby: `builder.html`/`upload.html` don't currently send `creator` at all, since neither page has a concept of "current player name" yet — a known gap, not fixed as part of Milestone 6).
+- `name`, `creator`, `version`, `build`, and `logic` are all required fields — the real validator rejects a robot missing any of them, `logic` included even though no frontend page can author it yet (that's Milestone 5, not built). `builder.html` covers this by asking for a creator name and shipping every robot with a fixed baseline `logic` (find an enemy, close in, shoot) until a real logic editor exists — see `DEFAULT_LOGIC` in `frontend/src/builder.js`. `upload.html` has no such fallback: it validates whatever file it's given and surfaces the real error if a field is missing, which is correct behavior for a validator, not a bug to fix.
 - `logic` rules run in ascending `priority` order; the first matching rule wins for that tick.
 - Allowed comparison ops: `lt`, `gt`, `eq`, `neq`, `and`, `or`, `not`.
 - Allowed actions (stage 1): `move_forward`, `move_backward`, `turn_left`, `turn_right`, `turn_toward_enemy`, `move_toward_enemy`, `move_away_from_enemy`, `shoot`, `select_nearest_enemy`, `select_weakest_enemy`, `wait`, `scan`.
