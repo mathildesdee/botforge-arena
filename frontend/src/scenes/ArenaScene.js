@@ -3,10 +3,13 @@
 // scores, or outcomes itself — it just reflects state coming over the
 // wire from JsonSocket. Robot/projectile views are created once per
 // id and then updated in place so movement reads as continuous
-// rather than a full redraw every tick.
+// rather than a full redraw every tick. Visual feedback (muzzle
+// flashes, explosions, banners) lives in effects.js, kept separate
+// from this state-reflecting logic.
 
 import JsonSocket from '../net/JsonSocket.js';
 import MatchHud from '../hud/MatchHud.js';
+import { muzzleFlash, hitSpark, explosion, showBanner, showCountdown } from '../effects.js';
 import { WS_URL } from '../config.js';
 
 const FACING_LENGTH = 26;
@@ -25,7 +28,7 @@ export default class ArenaScene extends Phaser.Scene {
     super('ArenaScene');
     this.robotViews = new Map();
     this.robotNames = new Map();
-    this.projectileViews = [];
+    this.projectileViews = new Map();
   }
 
   create() {
@@ -55,17 +58,22 @@ export default class ArenaScene extends Phaser.Scene {
         break;
       case 'match_start':
         this.hud.setTotalRounds(message.total_rounds);
+        showCountdown(this);
         break;
       case 'round_start':
         this.hud.setRound(message.round, message.total_rounds);
+        showBanner(this, `Round ${message.round}`, { holdMs: 700 });
         break;
       case 'round_end':
         this.hud.setScores(message.scores, this.robotNames);
         break;
-      case 'match_end':
+      case 'match_end': {
         this.hud.setScores(message.final_scores, this.robotNames);
         this.hud.setMatchFinished();
+        const winnerName = this.robotNames.get(message.winner_id) || 'Nobody';
+        showBanner(this, `🏆 ${winnerName} wins!`, { holdMs: 2500, color: '#ffd54f' });
         break;
+      }
       default:
         break;
     }
@@ -73,7 +81,26 @@ export default class ArenaScene extends Phaser.Scene {
 
   applyState(state) {
     (state.robots || []).forEach((robot) => this.upsertRobot(robot));
-    this.redrawProjectiles(state.projectiles || []);
+    this.upsertProjectiles(state.projectiles || []);
+    (state.events || []).forEach((event) => this.handleCombatEvent(event));
+  }
+
+  handleCombatEvent(event) {
+    if (event.type === 'hit') {
+      const view = this.robotViews.get(event.target_id);
+      if (view) {
+        hitSpark(this, view.container.x, view.container.y);
+        // Flash red now; the next tick's updateRobotView (a fraction of
+        // a second later) naturally restores the correct alive/health
+        // color, so there's no need to schedule a manual revert here.
+        view.body.setFillStyle(0xff5252);
+      }
+    } else if (event.type === 'destroyed') {
+      const view = this.robotViews.get(event.robot_id);
+      if (view) {
+        explosion(this, view.container.x, view.container.y);
+      }
+    }
   }
 
   upsertRobot(robot) {
@@ -121,8 +148,36 @@ export default class ArenaScene extends Phaser.Scene {
     view.barFg.fillColor = healthRatio > 0.3 ? 0x4caf50 : 0xe53935;
   }
 
-  redrawProjectiles(projectiles) {
-    this.projectileViews.forEach((view) => view.destroy());
-    this.projectileViews = projectiles.map((p) => this.add.circle(p.x, p.y, 4, 0xffca28));
+  upsertProjectiles(projectiles) {
+    const seenIds = new Set();
+
+    projectiles.forEach((p) => {
+      seenIds.add(p.id);
+      let dot = this.projectileViews.get(p.id);
+
+      if (!dot) {
+        // First frame we've seen this projectile — it just fired.
+        dot = this.add.circle(p.x, p.y, 4, 0xffca28);
+        this.projectileViews.set(p.id, dot);
+        const ownerView = this.robotViews.get(p.owner_id);
+        if (ownerView) {
+          muzzleFlash(this, ownerView.container.x, ownerView.container.y, p.direction);
+        }
+      } else {
+        // Leave a quickly-fading ghost at the old spot before moving —
+        // over consecutive frames this reads as a motion trail.
+        const ghost = this.add.circle(dot.x, dot.y, 3, 0xffca28, 0.35);
+        this.tweens.add({ targets: ghost, alpha: 0, duration: 150, onComplete: () => ghost.destroy() });
+      }
+
+      dot.setPosition(p.x, p.y);
+    });
+
+    for (const [id, dot] of this.projectileViews) {
+      if (!seenIds.has(id)) {
+        dot.destroy();
+        this.projectileViews.delete(id);
+      }
+    }
   }
 }
