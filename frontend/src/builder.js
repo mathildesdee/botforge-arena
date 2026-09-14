@@ -7,9 +7,24 @@ import { BUILD_STATS as STATS, renderRobotCard } from './robotCard.js';
 
 const TOTAL_BUILD_POINTS = 100;
 const STORAGE_KEY = 'botforge:saved-robots';
+const CREATOR_STORAGE_KEY = 'botforge:creator-name';
+
+// This page only lets a player allocate build points — there's no
+// logic editor yet (that's Milestone 5, a separate feature). The
+// real backend validator requires `version` and `logic` on every
+// robot regardless, so every robot built here ships with this
+// baseline behaviour (find an enemy, close in, shoot) rather than
+// failing validation or sitting inert in the arena. Matches the
+// "start simple" example from the project brief.
+const DEFAULT_VERSION = 1;
+const DEFAULT_LOGIC = [
+  { priority: 1, if: { op: 'lt', left: 'enemy.distance', right: 250 }, then: 'shoot' },
+  { priority: 2, if: { op: 'lt', left: 'enemy.distance', right: 999999 }, then: 'move_toward_enemy' },
+];
 
 const form = document.getElementById('robot-form');
 const nameInput = document.getElementById('robot-name');
+const creatorInput = document.getElementById('creator-name');
 const pointsRemainingEl = document.getElementById('points-remaining');
 const robotCardEl = document.getElementById('robot-card');
 const savedListEl = document.getElementById('saved-robots-list');
@@ -30,12 +45,16 @@ function totalPoints(build) {
   return Object.values(build).reduce((sum, v) => sum + v, 0);
 }
 
+function buildRobotPayload(name, creator, build) {
+  return { name, creator, version: DEFAULT_VERSION, build, logic: DEFAULT_LOGIC };
+}
+
 function renderPointsRemaining(total) {
   const remaining = TOTAL_BUILD_POINTS - total;
   pointsRemainingEl.textContent =
     remaining >= 0 ? `${remaining} points remaining` : `${-remaining} points over budget`;
   pointsRemainingEl.classList.toggle('over-budget', remaining < 0);
-  saveButton.disabled = remaining < 0 || !nameInput.value.trim();
+  saveButton.disabled = remaining < 0 || !nameInput.value.trim() || !creatorInput.value.trim();
 }
 
 function loadSavedRobots() {
@@ -68,9 +87,9 @@ function renderSavedRobots() {
     item.className = 'saved-item';
 
     const info = document.createElement('div');
-    info.innerHTML = `<strong>${robot.name}</strong><br><span class="saved-meta">${totalPoints(
-      robot.build
-    )} / ${TOTAL_BUILD_POINTS} points used</span>`;
+    info.innerHTML = `<strong>${robot.name}</strong><br><span class="saved-meta">by ${
+      robot.creator || 'unknown'
+    } — ${totalPoints(robot.build)} / ${TOTAL_BUILD_POINTS} points used</span>`;
 
     const actions = document.createElement('div');
     actions.className = 'saved-actions';
@@ -97,6 +116,7 @@ function renderSavedRobots() {
 
 function loadRobotIntoForm(robot) {
   nameInput.value = robot.name;
+  creatorInput.value = robot.creator || '';
   STATS.forEach((stat, i) => {
     sliders[i].value = robot.build[stat.key] ?? 0;
     document.getElementById(`${sliders[i].id}-value`).textContent = sliders[i].value;
@@ -119,21 +139,34 @@ sliders.forEach((slider) => {
 
 nameInput.addEventListener('input', refresh);
 
+creatorInput.addEventListener('input', () => {
+  try {
+    localStorage.setItem(CREATOR_STORAGE_KEY, creatorInput.value);
+  } catch {
+    // localStorage unavailable — remembering the name is best-effort only.
+  }
+  refresh();
+});
+
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   const build = currentBuild();
-  if (totalPoints(build) > TOTAL_BUILD_POINTS || !nameInput.value.trim()) {
+  if (totalPoints(build) > TOTAL_BUILD_POINTS || !nameInput.value.trim() || !creatorInput.value.trim()) {
     return;
   }
   const robots = loadSavedRobots();
-  robots.push({ name: nameInput.value.trim(), build });
+  robots.push(buildRobotPayload(nameInput.value.trim(), creatorInput.value.trim(), build));
   saveSavedRobots(robots);
   renderSavedRobots();
 });
 
 downloadButton.addEventListener('click', () => {
   const build = currentBuild();
-  const robot = { name: nameInput.value.trim() || 'Unnamed Robot', build };
+  const robot = buildRobotPayload(
+    nameInput.value.trim() || 'Unnamed Robot',
+    creatorInput.value.trim() || 'Unknown',
+    build
+  );
   const blob = new Blob([JSON.stringify(robot, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -142,6 +175,12 @@ downloadButton.addEventListener('click', () => {
   link.click();
   URL.revokeObjectURL(url);
 });
+
+try {
+  creatorInput.value = localStorage.getItem(CREATOR_STORAGE_KEY) || '';
+} catch {
+  // localStorage unavailable — the field just starts empty.
+}
 
 renderSavedRobots();
 refresh();
