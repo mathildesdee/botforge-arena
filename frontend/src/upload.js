@@ -5,6 +5,7 @@
 // server, since the server is always the source of truth.
 
 import { renderRobotCard } from './robotCard.js';
+import { readRobotFile } from './robotFile.js';
 import { VALIDATE_URL } from './config.js';
 
 const fileInput = document.getElementById('robot-file');
@@ -41,11 +42,6 @@ function renderSuccess(robot) {
   renderRobotCard(card, 'Stats', robot.build || {});
 }
 
-async function readFileAsJson(file) {
-  const text = await file.text();
-  return JSON.parse(text);
-}
-
 async function validateSelectedFile() {
   const file = fileInput.files[0];
   if (!file) {
@@ -55,7 +51,7 @@ async function validateSelectedFile() {
 
   let robot;
   try {
-    robot = await readFileAsJson(file);
+    robot = await readRobotFile(file);
   } catch (err) {
     renderBanner('error', `Could not parse this file as JSON: ${err.message}`);
     return;

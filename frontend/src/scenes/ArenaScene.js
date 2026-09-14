@@ -1,11 +1,11 @@
 // Renders whatever messages it's given over the WebSocket (see
 // docs/ARCHITECTURE.md #1-#2). This scene never decides positions,
 // scores, or outcomes itself — it just reflects state coming over the
-// wire from GameSocket. Robot/projectile views are created once per
+// wire from JsonSocket. Robot/projectile views are created once per
 // id and then updated in place so movement reads as continuous
 // rather than a full redraw every tick.
 
-import GameSocket from '../net/GameSocket.js';
+import JsonSocket from '../net/JsonSocket.js';
 import MatchHud from '../hud/MatchHud.js';
 import { WS_URL } from '../config.js';
 
@@ -39,7 +39,7 @@ export default class ArenaScene extends Phaser.Scene {
 
     this.hud = new MatchHud(this);
 
-    this.gameSocket = new GameSocket(WS_URL, {
+    this.gameSocket = new JsonSocket(WS_URL, {
       onMessage: (message) => this.handleMessage(message),
       onStatusChange: (status) => this.statusText.setText(STATUS_LABEL[status] || status),
     });

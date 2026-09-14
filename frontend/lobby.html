@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BotForge Arena — Lobby</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <nav>
+        <a href="index.html">Arena</a>
+        <a href="builder.html">Robot Builder</a>
+        <a href="upload.html">Upload Robot</a>
+        <a href="leaderboard.html">Leaderboard</a>
+        <a href="lobby.html">Lobby</a>
+      </nav>
+
+      <h1>Lobby</h1>
+      <p class="hint">
+        Choose a name, join, then upload a robot and mark yourself ready. Once 2-8 players are
+        ready, anyone can start the match — everyone connected watches it together in the Arena.
+      </p>
+
+      <div id="join-form">
+        <div class="field">
+          <label for="player-name">Your name</label>
+          <input type="text" id="player-name" maxlength="24" placeholder="Alice" required />
+        </div>
+
+        <div class="actions">
+          <button type="button" id="join-button" class="primary" disabled>Join lobby</button>
+        </div>
+
+        <div id="join-error"></div>
+      </div>
+
+      <div id="lobby-room" hidden>
+        <p id="lobby-status" class="hint"></p>
+
+        <div class="field">
+          <label for="robot-file">Robot JSON file</label>
+          <input type="file" id="robot-file" accept="application/json,.json" />
+          <p class="robot-summary" id="robot-summary">
+            Export one from the Robot Builder, or write your own matching
+            docs/ARCHITECTURE.md #5.
+          </p>
+        </div>
+
+        <div id="robot-upload-result"></div>
+
+        <div class="actions">
+          <button type="button" id="ready-button" class="primary" disabled>Mark ready</button>
+          <button type="button" id="start-button">Start match</button>
+          <button type="button" id="leave-button">Leave lobby</button>
+        </div>
+
+        <h2>Players in lobby</h2>
+        <div id="lobby-players" class="lobby-players"></div>
+      </div>
+    </div>
+
+    <script src="src/lobby.js" type="module"></script>
+  </body>
+</html>

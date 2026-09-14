@@ -290,3 +290,45 @@ input[type='file'] {
   color: #ffd54f;
   font-weight: 600;
 }
+
+.lobby-players {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.lobby-player {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #10151c;
+  border: 1px solid #2a3442;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.lobby-player .lobby-player-robot {
+  color: #7a8699;
+  font-size: 12px;
+}
+
+.ready-badge {
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #2a3442;
+  color: #a9b4c2;
+}
+
+.ready-badge.is-ready {
+  background: rgba(76, 175, 80, 0.18);
+  color: #8ee69a;
+}
+
+.robot-summary {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #7a8699;
+}
