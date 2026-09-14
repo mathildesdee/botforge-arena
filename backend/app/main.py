@@ -5,9 +5,9 @@ import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from . import db
+from .lobby import Lobby
 from .match import DEFAULT_NUM_ROUNDS, DEFAULT_ROUND_TIME_LIMIT, Match
 from .robot import Robot
-from .sample_robots import SAMPLE_ROBOTS
 from .validation import validate_robot_json
 
 logging.basicConfig(level=logging.INFO)
@@ -19,11 +19,8 @@ DT = 1 / TICK_RATE
 app = FastAPI(title="BotForge Arena")
 db.init_db()
 
-connected_clients: set[WebSocket] = set()
-
-# {sample robot name: robot_version_id}, registered once at startup so the
-# demo loop doesn't spam a new robot_versions row every match.
-_sample_version_ids: dict[str, int] = {}
+lobby = Lobby()
+match_in_progress = False
 
 
 @app.get("/health")
@@ -49,73 +46,116 @@ def leaderboard():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    """Milestone 6 (Multiplayer Lobby): players connect here, join with a
+    name, upload a robot, ready up, and start a match together — everyone
+    else connected watches live (`spectate together`)."""
     await websocket.accept()
-    connected_clients.add(websocket)
+    player = lobby.add_player(websocket)
+    await _broadcast(lobby.state_dict())
+
     try:
         while True:
-            # No client input yet — the server pushes state, the browser only renders it.
-            await websocket.receive_text()
+            try:
+                message = await websocket.receive_json()
+            except ValueError:
+                continue  # malformed JSON from this client — ignore, stay connected
+            await _handle_client_message(player, message)
     except WebSocketDisconnect:
-        connected_clients.discard(websocket)
+        lobby.remove_player(websocket)
+        await _broadcast(lobby.state_dict())
+
+
+async def _handle_client_message(player, message):
+    global match_in_progress
+
+    if not isinstance(message, dict):
+        return
+    msg_type = message.get("type")
+
+    if msg_type == "join":
+        lobby.set_name(player, message.get("name"))
+
+    elif msg_type == "upload_robot":
+        is_valid, errors = validate_robot_json(message.get("robot"))
+        if not is_valid:
+            await _send(player, {"type": "robot_upload_result", "valid": False, "errors": errors})
+            return
+        robot_definition = message["robot"]
+        _, _, version_id = db.save_robot_version(player.display_name(), robot_definition)
+        lobby.set_robot(player, robot_definition, version_id)
+        await _send(player, {"type": "robot_upload_result", "valid": True, "robot": robot_definition})
+
+    elif msg_type == "set_ready":
+        lobby.set_ready(player, message.get("ready"))
+
+    elif msg_type == "start_match":
+        if match_in_progress:
+            await _send(player, {"type": "lobby_error", "message": "A match is already running."})
+            return
+        if not lobby.can_start_match():
+            await _send(player, {
+                "type": "lobby_error",
+                "message": "Need 2-8 ready players (with an uploaded robot each) to start.",
+            })
+            return
+        match_in_progress = True
+        asyncio.create_task(_run_match(lobby.ready_players()))
+        return  # _run_match broadcasts its own state; nothing more to do here
+
+    else:
+        return  # unrecognized message type — ignore
+
+    await _broadcast(lobby.state_dict())
+
+
+def _find_websocket(player):
+    for websocket, candidate in lobby.players.items():
+        if candidate is player:
+            return websocket
+    return None
+
+
+async def _send(player, message):
+    websocket = _find_websocket(player)
+    if websocket is None:
+        return
+    try:
+        await websocket.send_json(message)
+    except Exception:
+        pass
 
 
 async def _broadcast(message):
     stale = []
-    for client in connected_clients:
+    for websocket in lobby.players:
         try:
-            await client.send_json(message)
+            await websocket.send_json(message)
         except Exception:
-            stale.append(client)
-    for client in stale:
-        connected_clients.discard(client)
+            stale.append(websocket)
+    for websocket in stale:
+        lobby.remove_player(websocket)
 
 
-def _ensure_sample_robot_versions():
-    """Registers each built-in demo robot as a robot_version exactly once
-    so repeated demo matches reuse the same DB rows instead of creating a
-    fresh version every loop iteration."""
-    for definition in SAMPLE_ROBOTS:
-        name = definition["name"]
-        if name in _sample_version_ids:
-            continue
-        is_valid, errors = validate_robot_json(definition)
-        if not is_valid:
-            raise RuntimeError(f"Invalid sample robot {name}: {errors}")
-        _, _, version_id = db.save_robot_version(definition["creator"], definition)
-        _sample_version_ids[name] = version_id
+async def _run_match(ready_players):
+    """Runs one match for the players who were ready when `start_match`
+    was received, broadcasting game_state and the match lifecycle
+    messages to every connected client (players and spectators alike)."""
+    global match_in_progress
 
-
-def _build_demo_match():
-    """Builds a Match from the built-in sample robots so the server has a
-    playable demo even before any real robot has been uploaded."""
-    robots = [
-        Robot(
-            robot_id=f"robot_{i + 1}",
-            name=definition["name"],
-            x=0, y=0, direction=0,
-            build=definition["build"],
-            logic=definition["logic"],
-        )
-        for i, definition in enumerate(SAMPLE_ROBOTS)
-    ]
-    robot_version_lookup = {
-        robot.id: _sample_version_ids[definition["name"]]
-        for robot, definition in zip(robots, SAMPLE_ROBOTS)
-    }
-    match_id = db.create_match(list(robot_version_lookup.values()))
-    return Match(robots, num_rounds=DEFAULT_NUM_ROUNDS, round_time_limit=DEFAULT_ROUND_TIME_LIMIT), \
-        robot_version_lookup, match_id
-
-
-async def game_loop():
-    """Runs demo matches back-to-back, broadcasting `game_state` every tick
-    plus the match_start/round_start/round_end/match_end lifecycle messages
-    the frontend already consumes (see frontend/src/scenes/ArenaScene.js
-    and frontend/dev-tools/mock_ws_server.py)."""
-    _ensure_sample_robot_versions()
-
-    while True:
-        match, robot_version_lookup, match_id = _build_demo_match()
+    try:
+        robots = [
+            Robot(
+                robot_id=player.id,
+                name=player.robot_definition["name"],
+                x=0, y=0, direction=0,
+                build=player.robot_definition["build"],
+                logic=player.robot_definition["logic"],
+            )
+            for player in ready_players
+        ]
+        robot_version_lookup = {player.id: player.robot_version_id for player in ready_players}
+        match_id = db.create_match(list(robot_version_lookup.values()))
+        match = Match(robots, num_rounds=DEFAULT_NUM_ROUNDS, round_time_limit=DEFAULT_ROUND_TIME_LIMIT)
 
         await _broadcast({"type": "match_start", "total_rounds": match.num_rounds})
 
@@ -157,9 +197,7 @@ async def game_loop():
             "winner_id": winner_id,
             "final_scores": dict(match.scores),
         })
-        await asyncio.sleep(3.0)
-
-
-@app.on_event("startup")
-async def start_game_loop():
-    asyncio.create_task(game_loop())
+    finally:
+        match_in_progress = False
+        lobby.reset_ready_states()
+        await _broadcast(lobby.state_dict())
