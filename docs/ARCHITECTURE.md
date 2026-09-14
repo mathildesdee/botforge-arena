@@ -73,7 +73,7 @@ Client → server:
 ```
 
 ```json
-{ "type": "upload_robot", "robot": { "...": "a full robot program, section 5" } }
+{ "type": "upload_robot", "robot": { "...": "a full robot program, section 6" } }
 ```
 
 ```json
@@ -112,7 +112,7 @@ Server → client, sent only to the uploader, in direct response to `upload_robo
 { "type": "robot_upload_result", "valid": false, "errors": [{ "field": "creator", "message": "Missing required field 'creator'." }] }
 ```
 
-Same error shape as the validation endpoint (section 6) — `upload_robot` runs the exact same validator.
+Same error shape as the validation endpoint (section 7) — `upload_robot` runs the exact same validator.
 
 Server → client, sent only to whoever requested `start_match`, if it's rejected (needs 2-8 ready players, one match at a time):
 
@@ -122,7 +122,33 @@ Server → client, sent only to whoever requested `start_match`, if it's rejecte
 
 On success, `start_match` triggers the match lifecycle messages (section 2) and `game_state` (section 1), broadcast to every connected socket — players and spectators alike, which is how "spectate together" works: anyone with the page open sees the match, not just the players who readied up.
 
-## 4. Robot build (hardware points)
+## 4. Tournament protocol (same `/ws` endpoint, Milestone 10)
+
+`{ "type": "start_tournament" }` — same rejection path as `start_match` (`lobby_error`) if fewer than 2 ready players or an activity is already running, sent only to the requester.
+
+On success, every unique pairing among the ready players is scheduled and run as a full match, back to back, broadcasting:
+
+```json
+{ "type": "tournament_start", "participants": [{ "id": "player_1", "name": "Alice" }], "total_pairings": 3 }
+```
+
+```json
+{ "type": "tournament_pairing_start", "pairing": 1, "total_pairings": 3, "participants": ["player_1", "player_2"] }
+```
+
+Between `tournament_pairing_start` and `tournament_pairing_end`, that pairing's match runs exactly like a normal match — the same `match_start`/`round_start`/`game_state`/`round_end`/`match_end` messages from sections 1-2, broadcast to everyone (including participants sitting out the current pairing, who are spectating it).
+
+```json
+{ "type": "tournament_pairing_end", "pairing": 1, "result": { "...": "winner/scores for this pairing" } }
+```
+
+```json
+{ "type": "tournament_end", "...": "final standings across all pairings" }
+```
+
+No frontend page consumes these yet — a tournament UI (bracket/standings view) is unbuilt.
+
+## 5. Robot build (hardware points)
 
 Exactly 100 points total, distributed across:
 
@@ -139,7 +165,7 @@ Exactly 100 points total, distributed across:
 
 Server rejects any build where the values sum to more than 100.
 
-## 5. Robot program (uploaded JSON)
+## 6. Robot program (uploaded JSON)
 
 ```json
 {
@@ -168,9 +194,9 @@ Server rejects any build where the values sum to more than 100.
 - Allowed actions (stage 1): `move_forward`, `move_backward`, `turn_left`, `turn_right`, `turn_toward_enemy`, `move_toward_enemy`, `move_away_from_enemy`, `shoot`, `select_nearest_enemy`, `select_weakest_enemy`, `wait`, `scan`.
 - Interpreter must cap execution at a fixed number of operations per robot per tick (start at 50) and skip the robot's turn for that tick if exceeded.
 
-## 6. Robot validation endpoint
+## 7. Robot validation endpoint
 
-`POST /api/robots/validate` — request body is a robot program JSON matching section 5.
+`POST /api/robots/validate` — request body is a robot program JSON matching section 6.
 
 Success response `200`:
 
@@ -193,7 +219,7 @@ Failure response `422`:
 - `field` uses dot-path notation matching the robot JSON structure (e.g. `build.speed`, `logic[2].if`), so the frontend can associate an error with a specific part of the upload.
 - This same shape is what Milestone 3's builder page will eventually POST to for server-side save/validation, once that endpoint exists.
 
-## 7. Leaderboard entry (persisted stats)
+## 8. Leaderboard entry (persisted stats)
 
 One row per robot, matching what the SQLite persistence layer stores:
 
@@ -215,11 +241,11 @@ One row per robot, matching what the SQLite persistence layer stores:
 
 The leaderboard page renders a list of these; where the data comes from (static mock JSON today, a real `/api/leaderboard` endpoint once the persistence issue lands) is an implementation detail behind that same shape.
 
-## 8. Sensor visibility
+## 9. Sensor visibility
 
 A robot only receives enemy data for robots within its `sensor_range`. Never expose an enemy's exact build stats or program — only what a sensor plausibly reveals (distance, direction, estimated health).
 
-## 9. Non-negotiable rules
+## 10. Non-negotiable rules
 
 - The server decides truth; the browser never computes hits or winners itself.
 - Uploaded robots are JSON only — never arbitrary code execution.
