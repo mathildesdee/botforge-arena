@@ -218,7 +218,13 @@ async def _send(player, message):
 
 async def _broadcast(message):
     stale = []
-    for websocket in lobby.players:
+    # Snapshot the keys before iterating: awaiting send_json() below
+    # yields control to the event loop, and a concurrent disconnect's
+    # WebSocketDisconnect handler calls lobby.remove_player() (mutating
+    # this same dict) before this loop resumes — iterating the live
+    # dict directly crashes with "dictionary changed size during
+    # iteration" the instant that happens mid-match.
+    for websocket in list(lobby.players):
         try:
             await websocket.send_json(message)
         except Exception:
