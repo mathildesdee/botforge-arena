@@ -413,7 +413,8 @@ input[type='file'] {
   color: #7a8699;
 }
 
-.rule-else-toggle {
+.rule-else-toggle,
+.rule-not-toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;

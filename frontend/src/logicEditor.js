@@ -1,11 +1,11 @@
 // Rule/variable/behaviour editor for the Robot Builder, matching
-// docs/ARCHITECTURE.md #6 and backend/app/interpreter.py. Deliberately
-// still not the complete language in one go (the project brief warns
-// against that): supports the PDF's progression stages 2 (AND/OR,
-// flat — not full nested trees), 4 (ELSE), 5 (variables), 6 (memory
-// fields), and 9 (behaviours as named, reusable action lists). NOT
-// and ad-hoc unnamed action sequences are deferred — a behaviour
-// already covers "do several things," just with a name attached.
+// docs/ARCHITECTURE.md #6 and backend/app/interpreter.py. Covers the
+// PDF's progression stages 2 (AND/OR, flat — not full nested
+// condition trees), 4 (ELSE), 5 (variables), 6 (memory fields),
+// 8 (ad-hoc action sequences), and 9 (named, reusable behaviours).
+// NOT applies per simple condition (not to an arbitrary compound
+// expression) — a deliberately bounded slice of what the interpreter
+// actually supports, not the whole language surface at once.
 
 export const LEFT_FIELDS = [
   { value: 'self.health_pct', label: 'My health %', kind: 'number' },
@@ -49,7 +49,7 @@ export const RULE_ACTIONS = [
 ];
 
 const MAX_CONDITIONS_PER_RULE = 2;
-const MAX_ACTIONS_PER_BEHAVIOUR = 5;
+const MAX_ACTIONS_PER_SEQUENCE = 5;
 
 export const DEFAULT_STARTER_LOGIC = [
   { priority: 1, if: { op: 'lt', left: 'enemy.distance', right: 250 }, then: 'shoot' },
@@ -70,7 +70,15 @@ function isCompoundCondition(condition) {
   return condition.op === 'and' || condition.op === 'or';
 }
 
+// A simple (non-AND/OR) condition, as loaded from JSON, might be
+// wrapped in `not`. The editor models negation as a flag on the
+// underlying condition rather than a separate node, since every
+// negatable thing in this UI is exactly one simple condition.
 function simpleConditionToState(condition) {
+  if (condition.op === 'not') {
+    return { ...simpleConditionToState(condition.left), negated: true };
+  }
+
   let right = condition.right;
   let rightKind = 'number';
   if (typeof right === 'string' && right.startsWith('vars.')) {
@@ -79,15 +87,16 @@ function simpleConditionToState(condition) {
   } else if (typeof right === 'boolean') {
     rightKind = 'boolean';
   }
-  return { left: condition.left, op: condition.op, right, rightKind };
+  return { left: condition.left, op: condition.op, right, rightKind, negated: false };
 }
 
 function simpleConditionToJson(c) {
-  return { op: c.op, left: c.left, right: c.rightKind === 'variable' ? `vars.${c.right}` : c.right };
+  const base = { op: c.op, left: c.left, right: c.rightKind === 'variable' ? `vars.${c.right}` : c.right };
+  return c.negated ? { op: 'not', left: base } : base;
 }
 
 function defaultSimpleCondition() {
-  return { left: LEFT_FIELDS[0].value, op: 'lt', right: 50, rightKind: 'number' };
+  return { left: LEFT_FIELDS[0].value, op: 'lt', right: 50, rightKind: 'number', negated: false };
 }
 
 function conditionToRuleState(ifCondition) {
@@ -109,6 +118,19 @@ function ruleStateToConditionJson(rule) {
   };
 }
 
+// A rule's then/else (and a behaviour's own body) is always modeled
+// here as an array of 1-5 literal-action-or-behaviour-name strings —
+// PDF stage 8. Serialized back to a plain string when there's only
+// one, matching how a beginner would write it by hand and staying
+// compatible with every robot saved before this existed.
+function toActionsArray(value) {
+  return Array.isArray(value) ? [...value] : [value];
+}
+
+function actionsArrayToJson(actions) {
+  return actions.length === 1 ? actions[0] : [...actions];
+}
+
 export function createRobotProgramEditor({ rulesEl, variablesEl, behavioursEl, previewEl }) {
   let rules = [];
   let variables = []; // [{ name, value }]
@@ -126,11 +148,66 @@ export function createRobotProgramEditor({ rulesEl, variablesEl, behavioursEl, p
     previewEl.textContent = JSON.stringify(getProgram(), null, 2);
   }
 
+  // ---------- shared: an editable 1-5-step action sequence ----------
+  // Used for a rule's THEN, a rule's ELSE, and a behaviour's own body
+  // — all three are "an ordered list of 1-5 actions," just reached
+  // from different places, so this is the one place that renders one.
+
+  function renderActionSequence(container, actions, options, onChange) {
+    container.innerHTML = '';
+
+    actions.forEach((actionName, index) => {
+      const select = document.createElement('select');
+      select.innerHTML = optionsHtml(options(), actionName);
+      select.addEventListener('change', () => {
+        actions[index] = select.value;
+        onChange();
+      });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.textContent = '×';
+      removeBtn.disabled = actions.length === 1;
+      removeBtn.addEventListener('click', () => {
+        actions.splice(index, 1);
+        onChange();
+      });
+
+      const stepWrap = document.createElement('span');
+      stepWrap.className = 'behaviour-step';
+      stepWrap.append(select, removeBtn);
+      container.appendChild(stepWrap);
+    });
+
+    const addStepBtn = document.createElement('button');
+    addStepBtn.type = 'button';
+    addStepBtn.textContent = '+ step';
+    addStepBtn.disabled = actions.length >= MAX_ACTIONS_PER_SEQUENCE;
+    addStepBtn.addEventListener('click', () => {
+      actions.push(RULE_ACTIONS[0].value);
+      onChange();
+    });
+    container.appendChild(addStepBtn);
+  }
+
   // ---------- conditions ----------
 
   function renderConditionRow(condition, onLeftChanged) {
     const row = document.createElement('div');
     row.className = 'rule-condition';
+
+    const notLabel = document.createElement('label');
+    notLabel.className = 'rule-not-toggle';
+    notLabel.title = 'Negate this condition';
+    const notCheckbox = document.createElement('input');
+    notCheckbox.type = 'checkbox';
+    notCheckbox.checked = condition.negated;
+    notCheckbox.addEventListener('change', () => {
+      condition.negated = notCheckbox.checked;
+      updatePreview();
+    });
+    notLabel.append(notCheckbox, ' NOT');
+    row.appendChild(notLabel);
 
     const leftSelect = document.createElement('select');
     leftSelect.innerHTML = optionsHtml(LEFT_FIELDS, condition.left);
@@ -305,13 +382,13 @@ export function createRobotProgramEditor({ rulesEl, variablesEl, behavioursEl, p
       thenWord.textContent = 'THEN';
       row.appendChild(thenWord);
 
-      const actionSelect = document.createElement('select');
-      actionSelect.innerHTML = optionsHtml(actionOptions(), rule.action);
-      actionSelect.addEventListener('change', () => {
-        rule.action = actionSelect.value;
+      const thenSteps = document.createElement('span');
+      thenSteps.className = 'behaviour-steps';
+      renderActionSequence(thenSteps, rule.actions, actionOptions, () => {
         updatePreview();
+        renderRules();
       });
-      row.appendChild(actionSelect);
+      row.appendChild(thenSteps);
 
       const elseLabel = document.createElement('label');
       elseLabel.className = 'rule-else-toggle';
@@ -320,20 +397,20 @@ export function createRobotProgramEditor({ rulesEl, variablesEl, behavioursEl, p
       elseCheckbox.checked = rule.hasElse;
       elseCheckbox.addEventListener('change', () => {
         rule.hasElse = elseCheckbox.checked;
-        if (rule.hasElse && !rule.elseAction) rule.elseAction = RULE_ACTIONS[0].value;
+        if (rule.hasElse && rule.elseActions.length === 0) rule.elseActions = [RULE_ACTIONS[0].value];
         renderRules();
       });
       elseLabel.append(elseCheckbox, ' ELSE');
       row.appendChild(elseLabel);
 
       if (rule.hasElse) {
-        const elseSelect = document.createElement('select');
-        elseSelect.innerHTML = optionsHtml(actionOptions(), rule.elseAction);
-        elseSelect.addEventListener('change', () => {
-          rule.elseAction = elseSelect.value;
+        const elseSteps = document.createElement('span');
+        elseSteps.className = 'behaviour-steps';
+        renderActionSequence(elseSteps, rule.elseActions, actionOptions, () => {
           updatePreview();
+          renderRules();
         });
-        row.appendChild(elseSelect);
+        row.appendChild(elseSteps);
       }
 
       rulesEl.appendChild(row);
@@ -343,7 +420,13 @@ export function createRobotProgramEditor({ rulesEl, variablesEl, behavioursEl, p
   }
 
   function addRule() {
-    rules.push({ conditions: [defaultSimpleCondition()], joiner: null, action: RULE_ACTIONS[0].value, hasElse: false, elseAction: null });
+    rules.push({
+      conditions: [defaultSimpleCondition()],
+      joiner: null,
+      actions: [RULE_ACTIONS[0].value],
+      hasElse: false,
+      elseActions: [],
+    });
     renderRules();
   }
 
@@ -421,36 +504,8 @@ export function createRobotProgramEditor({ rulesEl, variablesEl, behavioursEl, p
 
       const stepsEl = document.createElement('div');
       stepsEl.className = 'behaviour-steps';
-
-      behaviour.actions.forEach((actionName, aIndex) => {
-        const stepSelect = document.createElement('select');
-        stepSelect.innerHTML = optionsHtml(RULE_ACTIONS, actionName);
-        stepSelect.addEventListener('change', () => {
-          behaviour.actions[aIndex] = stepSelect.value;
-          updatePreview();
-        });
-
-        const removeStepBtn = document.createElement('button');
-        removeStepBtn.type = 'button';
-        removeStepBtn.textContent = '×';
-        removeStepBtn.disabled = behaviour.actions.length === 1;
-        removeStepBtn.addEventListener('click', () => {
-          behaviour.actions.splice(aIndex, 1);
-          renderBehaviours();
-        });
-
-        const stepWrap = document.createElement('span');
-        stepWrap.className = 'behaviour-step';
-        stepWrap.append(stepSelect, removeStepBtn);
-        stepsEl.appendChild(stepWrap);
-      });
-
-      const addStepBtn = document.createElement('button');
-      addStepBtn.type = 'button';
-      addStepBtn.textContent = '+ step';
-      addStepBtn.disabled = behaviour.actions.length >= MAX_ACTIONS_PER_BEHAVIOUR;
-      addStepBtn.addEventListener('click', () => {
-        behaviour.actions.push(RULE_ACTIONS[0].value);
+      renderActionSequence(stepsEl, behaviour.actions, () => RULE_ACTIONS, () => {
+        updatePreview();
         renderBehaviours();
       });
 
@@ -463,7 +518,7 @@ export function createRobotProgramEditor({ rulesEl, variablesEl, behavioursEl, p
         renderRules();
       });
 
-      row.append(nameInput, stepsEl, addStepBtn, removeBehaviourBtn);
+      row.append(nameInput, stepsEl, removeBehaviourBtn);
       behavioursEl.appendChild(row);
     });
 
@@ -480,8 +535,12 @@ export function createRobotProgramEditor({ rulesEl, variablesEl, behavioursEl, p
 
   function getProgram() {
     const logic = rules.map((rule, index) => {
-      const entry = { priority: index + 1, if: ruleStateToConditionJson(rule), then: rule.action };
-      if (rule.hasElse && rule.elseAction) entry.else = rule.elseAction;
+      const entry = {
+        priority: index + 1,
+        if: ruleStateToConditionJson(rule),
+        then: actionsArrayToJson(rule.actions),
+      };
+      if (rule.hasElse && rule.elseActions.length > 0) entry.else = actionsArrayToJson(rule.elseActions);
       return entry;
     });
 
@@ -501,7 +560,12 @@ export function createRobotProgramEditor({ rulesEl, variablesEl, behavioursEl, p
   function setProgram({ logic, variables: variablesObj, behaviours: behavioursObj }) {
     rules = (logic && logic.length > 0 ? logic : DEFAULT_STARTER_LOGIC).map((entry) => {
       const ruleState = conditionToRuleState(entry.if);
-      return { ...ruleState, action: entry.then, hasElse: Boolean(entry.else), elseAction: entry.else || null };
+      return {
+        ...ruleState,
+        actions: toActionsArray(entry.then),
+        hasElse: Boolean(entry.else),
+        elseActions: entry.else ? toActionsArray(entry.else) : [],
+      };
     });
     variables = Object.entries(variablesObj || {}).map(([name, value]) => ({ name, value }));
     behaviours = Object.entries(behavioursObj || {}).map(([name, actions]) => ({ name, actions: [...actions] }));
