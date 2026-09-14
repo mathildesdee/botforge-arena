@@ -55,3 +55,49 @@ def test_match_finishes_after_num_rounds():
     final = match.final_result()
     assert final["scores"]["a"] == 2
     assert len(final["rounds"]) == 2
+
+
+def test_run_to_completion_drives_every_round_without_a_manual_loop():
+    a = make_robot("a")
+    b = make_robot("b")
+    match = Match([a, b], num_rounds=5, round_time_limit=0.05, rng=random.Random(0))
+
+    final = match.run_to_completion(dt=0.1)
+
+    assert match.finished
+    assert len(match.round_results) == 5
+    assert final["rounds"] == [r.to_dict() for r in match.round_results]
+
+
+def test_round_win_counts_tallies_wins_and_draws():
+    a = make_robot("a")
+    b = make_robot("b")
+    # These inert robots (0 build points, no logic) never fight, so every
+    # round ends in a survival draw once the time limit is hit.
+    match = Match([a, b], num_rounds=10, round_time_limit=0.05, rng=random.Random(0))
+
+    match.run_to_completion(dt=0.1)
+    counts = match.round_win_counts()
+
+    assert counts == {"a": 0, "b": 0, "draws": 10}
+
+
+def test_round_win_counts_credits_a_decisive_winner():
+    aggressive_build = {"speed": 20, "armor": 0, "weapon_power": 60, "accuracy": 100, "fire_rate": 20, "sensor_range": 0}
+    aggressive_logic = [
+        # Shoot only once close (by then, move_toward_enemy will already have
+        # turned the robot to face its target over the preceding ticks —
+        # "shoot" itself never aims).
+        {"priority": 1, "if": {"op": "lt", "left": "enemy.distance", "right": 180}, "then": "shoot"},
+        {"priority": 2, "if": {"op": "eq", "left": "enemy.visible", "right": True}, "then": "move_toward_enemy"},
+        {"priority": 3, "if": {"op": "eq", "left": 1, "right": 1}, "then": "move_forward"},
+    ]
+    hunter = Robot("hunter", "hunter", x=0, y=0, direction=0, build=aggressive_build, logic=aggressive_logic)
+    victim = Robot("victim", "victim", x=0, y=0, direction=0, build=dict(BUILD), logic=[])
+
+    match = Match([hunter, victim], num_rounds=3, round_time_limit=20.0, rng=random.Random(0))
+    match.run_to_completion(dt=1 / 20)
+    counts = match.round_win_counts()
+
+    assert counts["hunter"] + counts["victim"] + counts["draws"] == 3
+    assert counts["hunter"] >= counts["victim"]  # a fully aggressive bot vs. an inert one should never lose
