@@ -1,9 +1,10 @@
-// Renders leaderboard entries matching docs/ARCHITECTURE.md #6.
-// Source is static mock JSON today; swapping in a real
-// `/api/leaderboard` fetch later is a one-line change here since the
-// row shape is already agreed with the backend persistence layer.
+// Renders leaderboard entries matching docs/ARCHITECTURE.md #8, from
+// the real backend endpoint — verified against a running instance of
+// backend/app/db.py's get_leaderboard(): row shape matches exactly
+// (rank, robot_name, creator, matches, rounds_won, rounds_lost,
+// win_pct, damage_caused, damage_received, accuracy, kills).
 
-const MOCK_LEADERBOARD_URL = 'src/mock/leaderboard.mock.json';
+import { LEADERBOARD_URL } from './config.js';
 
 const tbody = document.getElementById('leaderboard-body');
 
@@ -13,6 +14,12 @@ function formatPct(value) {
 
 function renderRows(entries) {
   tbody.innerHTML = '';
+
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10">No matches played yet.</td></tr>';
+    return;
+  }
+
   entries
     .slice()
     .sort((a, b) => a.rank - b.rank)
@@ -34,9 +41,14 @@ function renderRows(entries) {
     });
 }
 
-fetch(MOCK_LEADERBOARD_URL)
-  .then((response) => response.json())
+fetch(LEADERBOARD_URL)
+  .then((response) => {
+    if (!response.ok) {
+      throw new Error(`server responded ${response.status}`);
+    }
+    return response.json();
+  })
   .then(renderRows)
   .catch((err) => {
-    tbody.innerHTML = `<tr><td colspan="10">Could not load leaderboard data: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10">Could not reach the backend at ${LEADERBOARD_URL}: ${err.message}</td></tr>`;
   });

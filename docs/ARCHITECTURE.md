@@ -2,6 +2,8 @@
 
 The Python server is always authoritative: it decides positions, hits, damage, and winners. The browser only visualizes what it's told. These contracts let backend and frontend work built in parallel without waiting on each other — build against the shapes below, not against the other side's implementation.
 
+The frontend is a separate static site from the backend (different origin/port in dev), so `backend/app/main.py` runs with `CORSMiddleware` enabled — without it, a real browser silently blocks `fetch()` calls to `/api/robots/validate` and `/api/leaderboard` even though the server responds fine (found by testing with an actual `Origin` header and an `OPTIONS` preflight, not just `curl`, which doesn't enforce CORS at all). WebSocket connections (`/ws`) aren't subject to CORS, so this only matters for the two REST endpoints.
+
 ## 1. Game state (sent over WebSocket every tick)
 
 ```json
@@ -239,7 +241,7 @@ One row per robot, matching what the SQLite persistence layer stores:
 }
 ```
 
-The leaderboard page renders a list of these; where the data comes from (static mock JSON today, a real `/api/leaderboard` endpoint once the persistence issue lands) is an implementation detail behind that same shape.
+`GET /api/leaderboard` returns an array of these, sorted by rounds won then win percentage — `leaderboard.js` fetches it live. Verified the shapes match exactly against a running `backend/app/db.py`; `frontend/src/mock/leaderboard.mock.json` is no longer used by the page but is left in place as a schema example.
 
 ## 9. Sensor visibility
 

@@ -3,6 +3,7 @@ import logging
 import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 
 from . import db
 from .lobby import Lobby
@@ -18,6 +19,21 @@ TICK_RATE = 20  # ticks per second
 DT = 1 / TICK_RATE
 
 app = FastAPI(title="BotForge Arena")
+
+# The frontend is a separate static site (different origin/port from
+# this server in dev — see frontend/src/config.js), so plain browser
+# fetch() calls to /api/robots/validate and /api/leaderboard need CORS
+# enabled or the browser silently blocks them (curl doesn't enforce
+# CORS, so this was easy to miss testing with curl alone). WebSocket
+# connections (/ws) aren't subject to CORS, so this only matters for
+# the two REST endpoints.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 db.init_db()
 
 lobby = Lobby()

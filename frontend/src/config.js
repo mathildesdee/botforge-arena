@@ -7,9 +7,8 @@
 // and the lobby page both connect here.
 export const WS_URL = 'ws://localhost:8000/ws';
 
-// See docs/ARCHITECTURE.md #6.
+// See docs/ARCHITECTURE.md #7.
 export const VALIDATE_URL = 'http://localhost:8000/api/robots/validate';
 
-// A real GET /api/leaderboard now exists too (docs/ARCHITECTURE.md #7)
-// but leaderboard.js still reads static mock data — wiring it up is
-// Milestone 8 work, not part of this lobby pass.
+// See docs/ARCHITECTURE.md #8.
+export const LEADERBOARD_URL = 'http://localhost:8000/api/leaderboard';
