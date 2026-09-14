@@ -38,7 +38,8 @@ def decide_and_act(robot, visible_enemies, dt, arena_width, arena_height, fire_c
     context = _build_context(robot, enemy)
     action = _decide(robot, context, max_operations)
     if action is not None:
-        _perform(action, robot, enemy, visible_enemies, dt, arena_width, arena_height, fire_callback)
+        for single_action in _expand_actions(action, robot):
+            _perform(single_action, robot, enemy, visible_enemies, dt, arena_width, arena_height, fire_callback)
     # Snapshot health *before* this tick's own combat resolution runs, so
     # next tick's "previous_health_pct" means "health going into the last
     # tick" — letting logic detect "I was just hit" (PDF section 20).
@@ -137,6 +138,21 @@ def _evaluate(condition, context, ops, max_operations):
     if op == "neq":
         return left != right
     raise ValueError(f"Unsupported condition operator: {op!r}")
+
+
+def _expand_actions(action_ref, robot):
+    """Turns a rule's "then"/"else" value into a flat list of literal
+    actions to perform this tick — PDF stage 8 (a list of actions run
+    together) and stage 9 (a name referencing robot.behaviours, itself
+    just a list of literal actions; behaviours don't nest)."""
+    if isinstance(action_ref, list):
+        actions = []
+        for item in action_ref:
+            actions.extend(_expand_actions(item, robot))
+        return actions
+    if action_ref in robot.behaviours:
+        return list(robot.behaviours[action_ref])
+    return [action_ref]
 
 
 def _resolve(value, context):

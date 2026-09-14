@@ -82,3 +82,10 @@ def test_new_robot_carries_the_participants_variables_through():
     participant = Participant("p0", "p0", dict(BUILD), AGGRESSIVE_LOGIC, variables={"aggression": 70})
     robot = participant.new_robot()
     assert robot.variables == {"aggression": 70}
+
+
+def test_new_robot_carries_the_participants_behaviours_through():
+    behaviours = {"retreat": ["turn_toward_enemy", "move_backward"]}
+    participant = Participant("p0", "p0", dict(BUILD), AGGRESSIVE_LOGIC, behaviours=behaviours)
+    robot = participant.new_robot()
+    assert robot.behaviours == behaviours

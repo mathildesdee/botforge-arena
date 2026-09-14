@@ -86,10 +86,10 @@ async def simulate(request: SimulateRequest):
     robots = [
         Robot("robot_a", request.robot_a["name"], x=0, y=0, direction=0,
               build=request.robot_a["build"], logic=request.robot_a["logic"],
-              variables=request.robot_a.get("variables")),
+              variables=request.robot_a.get("variables"), behaviours=request.robot_a.get("behaviours")),
         Robot("robot_b", request.robot_b["name"], x=0, y=0, direction=0,
               build=request.robot_b["build"], logic=request.robot_b["logic"],
-              variables=request.robot_b.get("variables")),
+              variables=request.robot_b.get("variables"), behaviours=request.robot_b.get("behaviours")),
     ]
     match = Match(robots, num_rounds=rounds, round_time_limit=DEFAULT_ROUND_TIME_LIMIT)
     await asyncio.to_thread(match.run_to_completion, DT)
@@ -270,6 +270,7 @@ async def _run_match(ready_players):
                 build=player.robot_definition["build"],
                 logic=player.robot_definition["logic"],
                 variables=player.robot_definition.get("variables"),
+                behaviours=player.robot_definition.get("behaviours"),
             )
             for player in ready_players
         ]
@@ -298,6 +299,7 @@ async def _run_tournament(ready_players):
                 player.robot_definition["build"],
                 player.robot_definition["logic"],
                 variables=player.robot_definition.get("variables"),
+                behaviours=player.robot_definition.get("behaviours"),
                 robot_version_id=player.robot_version_id,
             )
             for player in ready_players

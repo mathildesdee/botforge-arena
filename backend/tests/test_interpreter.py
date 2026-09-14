@@ -7,8 +7,8 @@ DEFAULT_BUILD = {
 }
 
 
-def make_robot(robot_id, x, y, direction, logic, build=None):
-    return Robot(robot_id, robot_id, x, y, direction, build or DEFAULT_BUILD, logic)
+def make_robot(robot_id, x, y, direction, logic, build=None, behaviours=None):
+    return Robot(robot_id, robot_id, x, y, direction, build or DEFAULT_BUILD, logic, behaviours=behaviours)
 
 
 def test_first_matching_rule_wins_by_priority():
@@ -222,3 +222,48 @@ def test_previous_health_pct_reflects_health_before_the_last_ticks_damage():
     action2 = interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
                                           fire_callback=lambda r: None)
     assert action2 == "wait"
+
+
+def test_then_as_a_list_performs_every_action_in_one_tick():
+    robot = make_robot("r1", 0, 0, 0, logic=[
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": ["turn_left", "shoot"]},
+    ])
+    start_direction = robot.direction
+    fired = []
+    interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
+                                fire_callback=lambda r: fired.append(r.id))
+    # Both actions in the sequence ran this same tick.
+    assert robot.direction != start_direction
+    assert fired == ["r1"]
+
+
+def test_behaviour_name_expands_to_its_action_list():
+    robot = make_robot("r1", 0, 0, 0, logic=[
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": "aggressive_shot"},
+    ], behaviours={"aggressive_shot": ["turn_left", "shoot"]})
+    start_direction = robot.direction
+    fired = []
+    interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
+                                fire_callback=lambda r: fired.append(r.id))
+    assert robot.direction != start_direction
+    assert fired == ["r1"]
+
+
+def test_behaviour_referenced_from_within_a_list_also_expands():
+    robot = make_robot("r1", 0, 0, 0, logic=[
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": ["scan", "aggressive_shot"]},
+    ], behaviours={"aggressive_shot": ["turn_left", "shoot"]})
+    fired = []
+    interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
+                                fire_callback=lambda r: fired.append(r.id))
+    assert fired == ["r1"]
+
+
+def test_unknown_behaviour_name_is_ignored_like_an_unrecognized_action():
+    robot = make_robot("r1", 0, 0, 0, logic=[
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": "not_a_real_behaviour"},
+    ])
+    # Should not raise — an unrecognized name/action is just logged and skipped.
+    action = interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
+                                         fire_callback=lambda r: None)
+    assert action == "not_a_real_behaviour"

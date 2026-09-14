@@ -20,6 +20,9 @@ ALLOWED_ACTIONS = {
 NAME_MIN_LENGTH = 1
 NAME_MAX_LENGTH = 40
 
+MAX_ACTIONS_PER_RULE = 5
+MAX_BEHAVIOUR_LENGTH = 5
+
 
 def _err(field, message):
     return {"field": field, "message": message}
@@ -50,8 +53,13 @@ def validate_robot_json(data):
     if "build" in data:
         errors.extend(_validate_build(data["build"]))
 
+    behaviour_names = set()
+    if "behaviours" in data:
+        behaviour_errors, behaviour_names = _validate_behaviours(data["behaviours"])
+        errors.extend(behaviour_errors)
+
     if "logic" in data:
-        errors.extend(_validate_logic(data["logic"]))
+        errors.extend(_validate_logic(data["logic"], behaviour_names))
 
     if "variables" in data:
         errors.extend(_validate_variables(data["variables"]))
@@ -113,7 +121,55 @@ def _validate_variables(variables):
     return errors
 
 
-def _validate_logic(logic):
+def _validate_behaviours(behaviours):
+    """Optional named, reusable action sequences (PDF section 25, stage
+    9), e.g. {"retreat": ["turn_toward_enemy", "move_backward"]} — a
+    rule's "then"/"else" may reference "retreat" instead of repeating
+    the same action list. Returns (errors, valid_behaviour_names)."""
+    if not isinstance(behaviours, dict):
+        return [_err("behaviours", "Field 'behaviours' must be an object mapping names to action lists.")], set()
+
+    errors = []
+    names = set()
+    for name, actions in behaviours.items():
+        if not isinstance(actions, list) or not actions:
+            errors.append(_err(f"behaviours.{name}", f"Behaviour '{name}' must be a non-empty list of actions."))
+            continue
+        if len(actions) > MAX_BEHAVIOUR_LENGTH:
+            errors.append(_err(
+                f"behaviours.{name}",
+                f"Behaviour '{name}' has {len(actions)} actions; the maximum is {MAX_BEHAVIOUR_LENGTH}.",
+            ))
+            continue
+        bad = [a for a in actions if a not in ALLOWED_ACTIONS]
+        if bad:
+            errors.append(_err(f"behaviours.{name}", f"Behaviour '{name}' has unrecognized action(s): {', '.join(map(str, bad))}."))
+            continue
+        names.add(name)
+
+    return errors, names
+
+
+def _validate_action_ref(value, field_path, label, behaviour_names):
+    """An action reference is either a single action/behaviour name, or
+    a list of 1-5 of them run together in one tick (PDF stage 8)."""
+    if isinstance(value, list):
+        if not value:
+            return [_err(field_path, f"{label} action list cannot be empty.")]
+        if len(value) > MAX_ACTIONS_PER_RULE:
+            return [_err(field_path, f"{label} has {len(value)} actions; the maximum is {MAX_ACTIONS_PER_RULE}.")]
+        errors = []
+        for item in value:
+            if item not in ALLOWED_ACTIONS and item not in behaviour_names:
+                errors.append(_err(field_path, f"{label} action '{item}' is not a recognized action or behaviour."))
+        return errors
+
+    if value not in ALLOWED_ACTIONS and value not in behaviour_names:
+        return [_err(field_path, f"{label} action '{value}' is not a recognized action or behaviour.")]
+    return []
+
+
+def _validate_logic(logic, behaviour_names=frozenset()):
     if not isinstance(logic, list):
         return [_err("logic", "Field 'logic' must be a list of rules.")]
 
@@ -139,16 +195,14 @@ def _validate_logic(logic):
 
         if "then" not in rule:
             errors.append(_err(f"{field_prefix}.then", f"Rule #{index + 1} is missing a 'then' action."))
-        elif rule["then"] not in ALLOWED_ACTIONS:
-            errors.append(_err(
-                f"{field_prefix}.then",
-                f"Rule #{index + 1} action '{rule.get('then')}' is not a recognized action.",
+        else:
+            errors.extend(_validate_action_ref(
+                rule["then"], f"{field_prefix}.then", f"Rule #{index + 1}", behaviour_names,
             ))
 
-        if "else" in rule and rule["else"] not in ALLOWED_ACTIONS:
-            errors.append(_err(
-                f"{field_prefix}.else",
-                f"Rule #{index + 1} action '{rule.get('else')}' is not a recognized action.",
+        if "else" in rule:
+            errors.extend(_validate_action_ref(
+                rule["else"], f"{field_prefix}.else", f"Rule #{index + 1}", behaviour_names,
             ))
 
     return errors

@@ -35,7 +35,7 @@ SHOOT_ENERGY_COST = 8.0
 
 
 class Robot:
-    def __init__(self, robot_id, name, x, y, direction, build, logic=None, variables=None):
+    def __init__(self, robot_id, name, x, y, direction, build, logic=None, variables=None, behaviours=None):
         self.id = robot_id
         self.name = name
         self.x = x
@@ -44,6 +44,7 @@ class Robot:
         self.build = build
         self.logic = logic or []
         self.variables = variables or {}  # player-defined named numbers (PDF section 21)
+        self.behaviours = behaviours or {}  # named reusable action sequences (PDF section 25, stage 9)
 
         self.max_health = DEFAULT_MAX_HEALTH
         self.health = self.max_health

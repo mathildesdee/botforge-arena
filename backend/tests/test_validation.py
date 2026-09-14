@@ -111,3 +111,58 @@ def test_rejects_unrecognized_else_action():
     is_valid, errors = validate_robot_json(robot)
     assert not is_valid
     assert any("not a recognized action" in e["message"] for e in errors)
+
+
+def test_accepts_then_as_a_list_of_actions():
+    robot = {**VALID_ROBOT, "logic": [
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": ["turn_left", "shoot"]},
+    ]}
+    is_valid, errors = validate_robot_json(robot)
+    assert is_valid
+    assert errors == []
+
+
+def test_rejects_action_list_longer_than_the_max():
+    robot = {**VALID_ROBOT, "logic": [
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": ["wait"] * 6},
+    ]}
+    is_valid, errors = validate_robot_json(robot)
+    assert not is_valid
+    assert any("maximum is" in e["message"] for e in errors)
+
+
+def test_rejects_empty_action_list():
+    robot = {**VALID_ROBOT, "logic": [
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": []},
+    ]}
+    is_valid, errors = validate_robot_json(robot)
+    assert not is_valid
+
+
+def test_accepts_behaviours_and_referencing_them_from_logic():
+    robot = {
+        **VALID_ROBOT,
+        "behaviours": {"retreat": ["turn_toward_enemy", "move_backward"]},
+        "logic": [
+            {"priority": 1, "if": {"op": "lt", "left": "self.health_pct", "right": 20}, "then": "retreat"},
+        ],
+    }
+    is_valid, errors = validate_robot_json(robot)
+    assert is_valid
+    assert errors == []
+
+
+def test_rejects_behaviour_with_unrecognized_action():
+    robot = {**VALID_ROBOT, "behaviours": {"broken": ["self_destruct"]}}
+    is_valid, errors = validate_robot_json(robot)
+    assert not is_valid
+    assert any("broken" in e["field"] for e in errors)
+
+
+def test_rejects_reference_to_undeclared_behaviour():
+    robot = {**VALID_ROBOT, "logic": [
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": "never_declared"},
+    ]}
+    is_valid, errors = validate_robot_json(robot)
+    assert not is_valid
+    assert any("not a recognized action or behaviour" in e["message"] for e in errors)
