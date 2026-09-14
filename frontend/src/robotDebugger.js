@@ -93,31 +93,43 @@ function expandActions(actionRef, behaviours) {
 
 export function createRobotDebugger(robotDefinition) {
   const sensorRange = BASE_SENSOR_RANGE + robotDefinition.build.sensor_range * SENSOR_RANGE_PER_POINT;
-  const memory = { lastEnemyPosition: null, secondsSinceEnemySeen: 0, previousHealthPct: null };
+  const memory = { lastEnemyPosition: null, secondsSinceEnemySeen: 0, previousHealthPct: null, targetId: null };
 
-  function pickEnemy(self, others, dt) {
-    const visible = others.filter((r) => {
-      const d = Math.hypot(r.x - self.x, r.y - self.y);
-      return r.alive && d <= sensorRange;
-    });
+  function dist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
 
-    let enemy = null;
-    if (visible.length > 0) {
-      enemy = visible.reduce((nearest, r) =>
-        Math.hypot(r.x - self.x, r.y - self.y) < Math.hypot(nearest.x - self.x, nearest.y - self.y) ? r : nearest
-      );
-      memory.lastEnemyPosition = { x: enemy.x, y: enemy.y };
-      memory.secondsSinceEnemySeen = 0;
-    } else if (memory.lastEnemyPosition) {
-      memory.secondsSinceEnemySeen += dt;
+  function visibleEnemies(self, others) {
+    return others.filter((r) => r.alive && dist(r, self) <= sensorRange);
+  }
+
+  // Mirrors backend/app/interpreter.py's _current_enemy exactly: an
+  // already-locked target (memory.targetId) sticks as long as it's
+  // still visible, so turn_toward_enemy etc. keep tracking the same
+  // robot tick to tick — only falling back to "nearest visible" once
+  // there's no target, or the locked one is no longer in range.
+  function currentEnemy(self, visible) {
+    if (memory.targetId) {
+      const targeted = visible.find((r) => r.id === memory.targetId);
+      if (targeted) return targeted;
     }
-    return enemy;
+    if (visible.length === 0) return null;
+    return visible.reduce((nearest, r) => (dist(r, self) < dist(nearest, self) ? r : nearest));
   }
 
   // Evaluated once per game_state frame for the debugged robot.
   // `self` and `others` are entries straight from game_state.robots.
   function evaluate(self, others, dt) {
-    const enemy = pickEnemy(self, others, dt);
+    const visible = visibleEnemies(self, others);
+    const enemy = currentEnemy(self, visible);
+
+    if (enemy) {
+      memory.lastEnemyPosition = { x: enemy.x, y: enemy.y };
+      memory.secondsSinceEnemySeen = 0;
+    } else if (memory.lastEnemyPosition) {
+      memory.secondsSinceEnemySeen += dt;
+    }
+
     const healthPct = (self.health / self.max_health) * 100;
 
     const context = {
@@ -145,6 +157,21 @@ export function createRobotDebugger(robotDefinition) {
 
     const { action, rule } = decide(robotDefinition.logic || [], context);
     const actions = action !== null ? expandActions(action, robotDefinition.behaviours || {}) : [];
+
+    // Mirrors the *fixed* backend/app/interpreter.py: both selection
+    // actions recompute fresh from `visible`, not the sticky `enemy` —
+    // select_nearest_enemy must mean "nearest right now", even when a
+    // farther target is already locked in memory.targetId.
+    if (actions.includes('select_nearest_enemy')) {
+      memory.targetId = visible.length > 0
+        ? visible.reduce((nearest, r) => (dist(r, self) < dist(nearest, self) ? r : nearest)).id
+        : null;
+    } else if (actions.includes('select_weakest_enemy')) {
+      memory.targetId = visible.length > 0
+        ? visible.reduce((weakest, r) => (r.health < weakest.health ? r : weakest)).id
+        : null;
+    }
+
     memory.previousHealthPct = healthPct;
 
     return {

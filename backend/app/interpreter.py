@@ -205,7 +205,14 @@ def _perform(action, robot, enemy, visible_enemies, dt, arena_width, arena_heigh
     elif action == "shoot":
         fire_callback(robot)
     elif action == "select_nearest_enemy":
-        robot.target_id = enemy.id if enemy is not None else None
+        # Recompute from visible_enemies fresh, same as select_weakest_enemy
+        # below — NOT `enemy`, which is the *sticky* current target from
+        # _current_enemy() and would just reconfirm whatever's already
+        # locked (even a farther one) instead of actually finding nearest.
+        robot.target_id = (
+            min(visible_enemies, key=lambda r: distance(robot.x, robot.y, r.x, r.y)).id
+            if visible_enemies else None
+        )
     elif action == "select_weakest_enemy":
         robot.target_id = min(visible_enemies, key=lambda r: r.health_pct()).id if visible_enemies else None
     elif action == "scan":
