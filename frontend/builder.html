@@ -88,6 +88,17 @@
           </div>
         </div>
 
+        <h2>Behaviour</h2>
+        <p class="hint">
+          Rules run top to bottom — the first one whose condition is true wins that tick. Order
+          matters: a robot that always attacks first will never reach a retreat rule below it.
+        </p>
+        <div id="logic-rules"></div>
+        <div class="actions">
+          <button type="button" id="add-rule-button">Add rule</button>
+        </div>
+        <pre class="logic-preview" id="logic-preview"></pre>
+
         <div class="actions">
           <button type="submit" id="save-button" class="primary">Save robot</button>
           <button type="button" id="download-button">Download JSON</button>
