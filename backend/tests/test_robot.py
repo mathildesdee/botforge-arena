@@ -76,3 +76,28 @@ def test_try_consume_energy_succeeds_and_fails_appropriately():
 
     assert robot.try_consume_energy(6.0) is False
     assert robot.energy == 4.0  # unchanged when there wasn't enough
+
+
+def test_variables_default_to_empty_and_are_stored_as_given():
+    robot = make_robot()
+    assert robot.variables == {}
+
+    robot2 = Robot("r2", "Named", 0, 0, 0, dict(BUILD), logic=[], variables={"aggression": 70})
+    assert robot2.variables == {"aggression": 70}
+
+
+def test_memory_defaults_and_respawn_resets_it():
+    robot = make_robot()
+    assert robot.last_enemy_position is None
+    assert robot.seconds_since_enemy_seen == float("inf")
+    assert robot.previous_health_pct() == 100.0
+
+    robot.last_enemy_position = (123, 456)
+    robot.seconds_since_enemy_seen = 3.0
+    robot.previous_health = 40.0
+
+    robot.respawn(x=10, y=10)
+
+    assert robot.last_enemy_position is None
+    assert robot.seconds_since_enemy_seen == float("inf")
+    assert robot.previous_health_pct() == 100.0

@@ -131,3 +131,94 @@ def test_shoot_always_invokes_fire_callback_regardless_of_energy():
     interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
                                 fire_callback=lambda r: fired.append(r.id))
     assert fired == ["r1"]
+
+
+def test_else_fires_when_condition_is_false_and_ends_the_cascade():
+    robot = make_robot("r1", 0, 0, 0, logic=[
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 2}, "then": "shoot", "else": "wait"},
+        {"priority": 2, "if": {"op": "eq", "left": 1, "right": 1}, "then": "turn_left"},
+    ])
+    action = interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
+                                         fire_callback=lambda r: None)
+    # Rule 1's condition is false, but it has an "else" — that resolves the
+    # whole decision; rule 2 (which would otherwise match) is never reached.
+    assert action == "wait"
+
+
+def test_else_is_ignored_when_the_condition_is_true():
+    robot = make_robot("r1", 0, 0, 0, logic=[
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": "shoot", "else": "wait"},
+    ])
+    fired = []
+    action = interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
+                                         fire_callback=lambda r: fired.append(r.id))
+    assert action == "shoot"
+    assert fired == ["r1"]
+
+
+def test_vars_namespace_is_resolvable_in_conditions():
+    robot = make_robot("r1", 0, 0, 0, logic=[
+        {"priority": 1, "if": {"op": "gt", "left": "vars.aggression", "right": 50}, "then": "shoot"},
+        {"priority": 2, "if": {"op": "eq", "left": 1, "right": 1}, "then": "wait"},
+    ])
+    robot.variables = {"aggression": 70}
+    fired = []
+    action = interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
+                                         fire_callback=lambda r: fired.append(r.id))
+    assert action == "shoot"
+    assert fired == ["r1"]
+
+
+def test_seconds_since_enemy_seen_tracks_visibility():
+    robot = make_robot("r1", 0, 0, 0, logic=[])
+    enemy = make_robot("e1", 10, 0, 0, logic=[])
+
+    interpreter.decide_and_act(robot, [enemy], dt=0.5, arena_width=800, arena_height=600,
+                                fire_callback=lambda r: None)
+    assert robot.seconds_since_enemy_seen == 0.0
+
+    interpreter.decide_and_act(robot, [], dt=0.5, arena_width=800, arena_height=600,
+                                fire_callback=lambda r: None)
+    assert robot.seconds_since_enemy_seen == 0.5
+
+
+def test_move_toward_enemy_falls_back_to_last_known_position_once_out_of_sight():
+    robot = make_robot("r1", 100, 300, 0, logic=[
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": "move_toward_enemy"},
+    ])
+    enemy = make_robot("e1", 400, 300, 0, logic=[])
+
+    # Enemy briefly visible — robot remembers where it was.
+    interpreter.decide_and_act(robot, [enemy], dt=0.1, arena_width=800, arena_height=600,
+                                fire_callback=lambda r: None)
+    assert robot.last_enemy_position == (400, 300)
+
+    x_before = robot.x
+    # Enemy no longer visible, but the robot should still close in on the
+    # remembered position rather than freezing.
+    interpreter.decide_and_act(robot, [], dt=0.5, arena_width=800, arena_height=600,
+                                fire_callback=lambda r: None)
+    assert robot.x > x_before
+
+
+def test_previous_health_pct_reflects_health_before_the_last_ticks_damage():
+    # "then" fires when previous health was strictly higher than current
+    # health, i.e. "I was just damaged"; "else" otherwise.
+    robot = make_robot("r1", 0, 0, 0, logic=[
+        {"priority": 1,
+         "if": {"op": "gt", "left": "self.previous_health_pct", "right": "self.health_pct"},
+         "then": "wait", "else": "turn_left"},
+    ])
+
+    # Nothing has happened yet: previous == current -> "else".
+    action1 = interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
+                                          fire_callback=lambda r: None)
+    assert action1 == "turn_left"
+
+    robot.apply_damage(30)  # simulate this tick's combat resolution landing a hit
+
+    # previous_health_pct (captured before the hit, still 100) is now
+    # greater than health_pct (70) -> "then".
+    action2 = interpreter.decide_and_act(robot, [], dt=0.1, arena_width=800, arena_height=600,
+                                          fire_callback=lambda r: None)
+    assert action2 == "wait"

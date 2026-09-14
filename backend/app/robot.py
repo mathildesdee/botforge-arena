@@ -35,7 +35,7 @@ SHOOT_ENERGY_COST = 8.0
 
 
 class Robot:
-    def __init__(self, robot_id, name, x, y, direction, build, logic=None):
+    def __init__(self, robot_id, name, x, y, direction, build, logic=None, variables=None):
         self.id = robot_id
         self.name = name
         self.x = x
@@ -43,6 +43,7 @@ class Robot:
         self.direction = direction % 360.0
         self.build = build
         self.logic = logic or []
+        self.variables = variables or {}  # player-defined named numbers (PDF section 21)
 
         self.max_health = DEFAULT_MAX_HEALTH
         self.health = self.max_health
@@ -52,6 +53,12 @@ class Robot:
 
         self.target_id = None
         self.fire_cooldown_remaining = 0.0
+
+        # Memory (PDF section 20): state that persists tick-to-tick so a
+        # robot can react to what it saw earlier, not just this instant.
+        self.last_enemy_position = None
+        self.seconds_since_enemy_seen = float("inf")
+        self.previous_health = self.health
 
         # Cumulative match-level stats (leaderboard). Not reset by respawn() —
         # they span the whole match, not a single round.
@@ -79,6 +86,9 @@ class Robot:
 
     def energy_pct(self):
         return (self.energy / self.max_energy) * 100.0 if self.max_energy else 0.0
+
+    def previous_health_pct(self):
+        return (self.previous_health / self.max_health) * 100.0 if self.max_health else 0.0
 
     def tick_cooldowns(self, dt):
         self.fire_cooldown_remaining = max(0.0, self.fire_cooldown_remaining - dt)
@@ -154,6 +164,9 @@ class Robot:
         self.alive = True
         self.target_id = None
         self.fire_cooldown_remaining = 0.0
+        self.last_enemy_position = None
+        self.seconds_since_enemy_seen = float("inf")
+        self.previous_health = self.health
 
     def to_dict(self):
         return {

@@ -72,3 +72,13 @@ def test_empty_participant_list_is_immediately_finished():
     assert tournament.finished
     assert tournament.start_next_pairing() is None
     assert tournament.standings()["pairings"] == []
+
+
+def test_new_robot_carries_the_participants_variables_through():
+    # Regression: it's easy to wire a robot_definition's build/logic into
+    # a Participant/Robot and forget "variables" — the JSON contract's
+    # least-used field. If this silently defaults to {}, any "vars.x"
+    # condition resolves to None and crashes the interpreter mid-match.
+    participant = Participant("p0", "p0", dict(BUILD), AGGRESSIVE_LOGIC, variables={"aggression": 70})
+    robot = participant.new_robot()
+    assert robot.variables == {"aggression": 70}

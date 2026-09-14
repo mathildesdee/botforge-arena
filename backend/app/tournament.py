@@ -22,15 +22,17 @@ class Participant:
     build a fresh Robot for each pairing (a robot must start each
     pairing undamaged, independent of any previous pairing)."""
 
-    def __init__(self, participant_id, name, build, logic, robot_version_id=None):
+    def __init__(self, participant_id, name, build, logic, variables=None, robot_version_id=None):
         self.id = participant_id
         self.name = name
         self.build = build
         self.logic = logic
+        self.variables = variables
         self.robot_version_id = robot_version_id
 
     def new_robot(self):
-        return Robot(self.id, self.name, x=0, y=0, direction=0, build=self.build, logic=self.logic)
+        return Robot(self.id, self.name, x=0, y=0, direction=0,
+                      build=self.build, logic=self.logic, variables=self.variables)
 
 
 class PairingResult:

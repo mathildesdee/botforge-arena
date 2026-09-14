@@ -53,6 +53,9 @@ def validate_robot_json(data):
     if "logic" in data:
         errors.extend(_validate_logic(data["logic"]))
 
+    if "variables" in data:
+        errors.extend(_validate_variables(data["variables"]))
+
     return (len(errors) == 0), errors
 
 
@@ -96,6 +99,20 @@ def _validate_build(build):
     return errors
 
 
+def _validate_variables(variables):
+    """Optional player-defined named numbers (PDF section 21), e.g.
+    {"aggression": 70, "preferred_distance": 300} — referenced in
+    conditions as "vars.aggression"."""
+    if not isinstance(variables, dict):
+        return [_err("variables", "Field 'variables' must be an object mapping names to numbers.")]
+
+    errors = []
+    for name, value in variables.items():
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            errors.append(_err(f"variables.{name}", f"Variable '{name}' must be a number."))
+    return errors
+
+
 def _validate_logic(logic):
     if not isinstance(logic, list):
         return [_err("logic", "Field 'logic' must be a list of rules.")]
@@ -126,6 +143,12 @@ def _validate_logic(logic):
             errors.append(_err(
                 f"{field_prefix}.then",
                 f"Rule #{index + 1} action '{rule.get('then')}' is not a recognized action.",
+            ))
+
+        if "else" in rule and rule["else"] not in ALLOWED_ACTIONS:
+            errors.append(_err(
+                f"{field_prefix}.else",
+                f"Rule #{index + 1} action '{rule.get('else')}' is not a recognized action.",
             ))
 
     return errors

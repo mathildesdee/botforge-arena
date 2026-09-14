@@ -34,10 +34,15 @@ def decide_and_act(robot, visible_enemies, dt, arena_width, arena_height, fire_c
     per-tick operation limit was exceeded.
     """
     enemy = _current_enemy(robot, visible_enemies)
+    _update_memory(robot, enemy, dt)
     context = _build_context(robot, enemy)
     action = _decide(robot, context, max_operations)
     if action is not None:
         _perform(action, robot, enemy, visible_enemies, dt, arena_width, arena_height, fire_callback)
+    # Snapshot health *before* this tick's own combat resolution runs, so
+    # next tick's "previous_health_pct" means "health going into the last
+    # tick" — letting logic detect "I was just hit" (PDF section 20).
+    robot.previous_health = robot.health
     return action
 
 
@@ -51,13 +56,27 @@ def _current_enemy(robot, visible_enemies):
     return min(visible_enemies, key=lambda r: distance(robot.x, robot.y, r.x, r.y))
 
 
+def _update_memory(robot, enemy, dt):
+    """Tracks state that persists tick-to-tick (PDF section 20): where the
+    enemy was last seen, and how long ago that was."""
+    if enemy is not None:
+        robot.last_enemy_position = (enemy.x, enemy.y)
+        robot.seconds_since_enemy_seen = 0.0
+    elif robot.last_enemy_position is not None:
+        robot.seconds_since_enemy_seen += dt
+
+
 def _build_context(robot, enemy):
     self_ctx = {
         "health_pct": robot.health_pct(),
         "energy_pct": robot.energy_pct(),
+        "previous_health_pct": robot.previous_health_pct(),
         "x": robot.x,
         "y": robot.y,
         "direction": robot.direction,
+        "seconds_since_enemy_seen": robot.seconds_since_enemy_seen,
+        "shots_fired": robot.shots_fired,
+        "shots_hit": robot.hits_landed,
     }
     if enemy is None:
         enemy_ctx = {"distance": float("inf"), "health_pct": 0.0, "direction": 0.0, "visible": False}
@@ -68,7 +87,7 @@ def _build_context(robot, enemy):
             "direction": enemy.direction,
             "visible": True,
         }
-    return {"self": self_ctx, "enemy": enemy_ctx}
+    return {"self": self_ctx, "enemy": enemy_ctx, "vars": robot.variables}
 
 
 def _decide(robot, context, max_operations):
@@ -77,6 +96,12 @@ def _decide(robot, context, max_operations):
         for rule in sorted(robot.logic, key=lambda r: r["priority"]):
             if _evaluate(rule["if"], context, ops, max_operations):
                 return rule["then"]
+            if "else" in rule:
+                # A rule with "else" always resolves — matched or not —
+                # so it terminates the priority cascade either way (PDF
+                # section 25, stage 4), unlike a plain rule which just
+                # falls through to the next priority when it doesn't match.
+                return rule["else"]
         return None
     except LogicLimitExceeded:
         logger.warning(
@@ -126,6 +151,15 @@ def _resolve(value, context):
 
 
 def _perform(action, robot, enemy, visible_enemies, dt, arena_width, arena_height, fire_callback):
+    # turn_toward_enemy/move_toward_enemy/move_away_from_enemy fall back to
+    # the last place an enemy was seen when none is visible right now —
+    # "if an enemy disappears behind a wall, move toward the last known
+    # position" (PDF section 20).
+    if enemy is not None:
+        target_position = (enemy.x, enemy.y)
+    else:
+        target_position = robot.last_enemy_position
+
     # Movement, turning, scanning, and shooting cost energy (PDF section
     # 24) — insufficient energy means the action simply doesn't happen
     # this tick, same as a weapon still on cooldown.
@@ -142,15 +176,15 @@ def _perform(action, robot, enemy, visible_enemies, dt, arena_width, arena_heigh
         if robot.try_consume_energy(TURN_ENERGY_COST_PER_SECOND * dt):
             robot.turn_right(dt)
     elif action == "turn_toward_enemy":
-        if enemy is not None and robot.try_consume_energy(TURN_ENERGY_COST_PER_SECOND * dt):
-            robot.turn_toward(enemy.x, enemy.y, dt)
+        if target_position is not None and robot.try_consume_energy(TURN_ENERGY_COST_PER_SECOND * dt):
+            robot.turn_toward(target_position[0], target_position[1], dt)
     elif action == "move_toward_enemy":
-        if enemy is not None and robot.try_consume_energy(MOVE_ENERGY_COST_PER_SECOND * dt):
-            robot.turn_toward(enemy.x, enemy.y, dt)
+        if target_position is not None and robot.try_consume_energy(MOVE_ENERGY_COST_PER_SECOND * dt):
+            robot.turn_toward(target_position[0], target_position[1], dt)
             robot.move_forward(dt, arena_width, arena_height)
     elif action == "move_away_from_enemy":
-        if enemy is not None and robot.try_consume_energy(MOVE_ENERGY_COST_PER_SECOND * dt):
-            robot.turn_toward(enemy.x, enemy.y, dt)
+        if target_position is not None and robot.try_consume_energy(MOVE_ENERGY_COST_PER_SECOND * dt):
+            robot.turn_toward(target_position[0], target_position[1], dt)
             robot.move_backward(dt, arena_width, arena_height)
     elif action == "shoot":
         fire_callback(robot)

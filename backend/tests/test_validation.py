@@ -78,3 +78,36 @@ def test_error_messages_are_specific_not_generic():
     assert not is_valid
     assert all(e["message"] != "invalid" for e in errors)
     assert all(e["field"] for e in errors)
+
+
+def test_accepts_optional_variables():
+    robot = {**VALID_ROBOT, "variables": {"aggression": 70, "preferred_distance": 300}}
+    is_valid, errors = validate_robot_json(robot)
+    assert is_valid
+    assert errors == []
+
+
+def test_rejects_non_numeric_variable():
+    robot = {**VALID_ROBOT, "variables": {"aggression": "high"}}
+    is_valid, errors = validate_robot_json(robot)
+    assert not is_valid
+    assert any("aggression" in e["field"] for e in errors)
+
+
+def test_accepts_else_action_on_a_rule():
+    robot = {**VALID_ROBOT, "logic": [
+        {"priority": 1, "if": {"op": "eq", "left": "enemy.visible", "right": True},
+         "then": "shoot", "else": "wait"},
+    ]}
+    is_valid, errors = validate_robot_json(robot)
+    assert is_valid
+    assert errors == []
+
+
+def test_rejects_unrecognized_else_action():
+    robot = {**VALID_ROBOT, "logic": [
+        {"priority": 1, "if": {"op": "eq", "left": 1, "right": 1}, "then": "wait", "else": "self_destruct"},
+    ]}
+    is_valid, errors = validate_robot_json(robot)
+    assert not is_valid
+    assert any("not a recognized action" in e["message"] for e in errors)
