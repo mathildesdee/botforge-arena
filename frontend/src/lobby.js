@@ -24,6 +24,7 @@ const lobbyStatusEl = document.getElementById('lobby-status');
 const robotUploadResultEl = document.getElementById('robot-upload-result');
 const readyButton = document.getElementById('ready-button');
 const startButton = document.getElementById('start-button');
+const startTournamentButton = document.getElementById('start-tournament-button');
 const leaveButton = document.getElementById('leave-button');
 const playersEl = document.getElementById('lobby-players');
 
@@ -120,11 +121,19 @@ function handleMessage(message) {
       lobbyStatusEl.innerHTML = `Match starting (${message.total_rounds} rounds) — <a href="index.html">go watch in the Arena</a>.`;
       readyButton.disabled = true;
       startButton.disabled = true;
+      startTournamentButton.disabled = true;
+      break;
+    case 'tournament_start':
+      lobbyStatusEl.innerHTML = `Tournament starting (${message.total_pairings} pairings) — <a href="index.html">go watch in the Arena</a>.`;
+      readyButton.disabled = true;
+      startButton.disabled = true;
+      startTournamentButton.disabled = true;
       break;
     default:
-      // round_start/game_state/round_end/match_end all belong to the
-      // arena page once a match is running — the lobby only cares
-      // about match_start as the cue to point players there.
+      // round_start/game_state/round_end/match_end/tournament_* all
+      // belong to the arena page once something is running — the
+      // lobby only cares about the *_start messages as the cue to
+      // point players there.
       break;
   }
 }
@@ -177,6 +186,10 @@ startButton.addEventListener('click', () => {
   socket.send({ type: 'start_match' });
 });
 
+startTournamentButton.addEventListener('click', () => {
+  socket.send({ type: 'start_tournament' });
+});
+
 leaveButton.addEventListener('click', () => {
   // No "leave" message in the real protocol — closing the connection
   // is how the server notices you've gone.
@@ -191,4 +204,5 @@ leaveButton.addEventListener('click', () => {
   fileInput.value = '';
   readyButton.disabled = false;
   startButton.disabled = false;
+  startTournamentButton.disabled = false;
 });

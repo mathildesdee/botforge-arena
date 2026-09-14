@@ -150,7 +150,7 @@ Between `tournament_pairing_start` and `tournament_pairing_end`, that pairing's 
 { "type": "tournament_end", "...": "final standings across all pairings" }
 ```
 
-No frontend page consumes these yet — a tournament UI (bracket/standings view) is unbuilt.
+`lobby.html` has a "Start tournament" button sending `start_tournament`. `ArenaScene.js` shows current-pairing progress and, on `tournament_end`, a final standings list — both live in `TournamentHud.js`. It doesn't render anything for `tournament_pairing_end`: each pairing already gets the normal per-match winner banner (section 2), so a second summary there would be redundant. Verified `tournament_start`/`tournament_pairing_start` live against a real 3-player tournament; `tournament_end`'s `ranking` shape (the only field the HUD reads) was confirmed by reading `Tournament.standings()` directly rather than waiting out a live run — a single pairing can take up to 10 minutes real-time (10 rounds × 60s cap each).
 
 ## 5. Robot build (hardware points)
 

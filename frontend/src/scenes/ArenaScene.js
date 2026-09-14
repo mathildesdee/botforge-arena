@@ -9,6 +9,7 @@
 
 import JsonSocket from '../net/JsonSocket.js';
 import MatchHud from '../hud/MatchHud.js';
+import TournamentHud from '../hud/TournamentHud.js';
 import RobotDebugPanel from '../hud/RobotDebugPanel.js';
 import { muzzleFlash, hitSpark, explosion, showBanner, showCountdown } from '../effects.js';
 import { createRobotDebugger } from '../robotDebugger.js';
@@ -32,6 +33,7 @@ export default class ArenaScene extends Phaser.Scene {
     super('ArenaScene');
     this.robotViews = new Map();
     this.robotNames = new Map();
+    this.tournamentNames = new Map();
     this.projectileViews = new Map();
     this.selectedRobotId = null;
     this.myPlayerId = null;
@@ -49,6 +51,7 @@ export default class ArenaScene extends Phaser.Scene {
       .setDepth(10);
 
     this.hud = new MatchHud(this);
+    this.tournamentHud = new TournamentHud(this);
     this.debugPanel = new RobotDebugPanel(this);
     this.loadOwnRobot();
 
@@ -100,7 +103,24 @@ export default class ArenaScene extends Phaser.Scene {
         showBanner(this, `🏆 ${winnerName} wins!`, { holdMs: 2500, color: '#ffd54f' });
         break;
       }
+      case 'tournament_start':
+        message.participants.forEach((p) => this.tournamentNames.set(p.id, p.name));
+        this.tournamentHud.setPairing(0, message.total_pairings, []);
+        showBanner(this, `Tournament starting — ${message.total_pairings} pairings`, { holdMs: 1500 });
+        break;
+      case 'tournament_pairing_start': {
+        const names = message.participants.map((id) => this.tournamentNames.get(id) || id);
+        this.tournamentHud.setPairing(message.pairing, message.total_pairings, names);
+        break;
+      }
+      case 'tournament_end':
+        this.tournamentHud.setStandings(message.ranking, this.tournamentNames);
+        showBanner(this, '🏆 Tournament complete!', { holdMs: 2500, color: '#ffd54f' });
+        break;
       default:
+        // tournament_pairing_end isn't rendered separately — each
+        // pairing already gets the normal match_end winner banner
+        // above, so a second summary here would just be redundant.
         break;
     }
   }
