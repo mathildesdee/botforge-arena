@@ -38,7 +38,7 @@ The frontend is a separate static site from the backend (different origin/port i
 These share the connection with `game_state` but arrive far less often — on round/match boundaries rather than every tick. A HUD listens for these to know the round number and score; it does not derive them from `game_state`.
 
 ```json
-{ "type": "match_start", "total_rounds": 10, "robots": [{ "id": "robot_1", "name": "Hunter V3" }] }
+{ "type": "match_start", "total_rounds": 10 }
 ```
 
 ```json
@@ -54,7 +54,9 @@ These share the connection with `game_state` but arrive far less often — on ro
 }
 ```
 
-`scores` is the running total across all rounds so far (win = 3pts, survived draw = 1pt, per the project brief), not just this round's points.
+`scores` is the running total across all rounds so far (win = 3pts, survived draw = 1pt, per the project brief), not just this round's points. `round_end` also carries a `replay_id` (the round's `round_results` row id) — see section 9.
+
+An earlier draft of this doc showed `match_start` carrying a `robots` array; the real backend never sends one (nothing reads it either — `ArenaScene.js`'s `match_start` handler only uses `total_rounds`), so it's removed here to match what's actually implemented.
 
 ```json
 { "type": "match_end", "winner_id": "robot_1", "final_scores": { "robot_1": 24, "robot_2": 9 } }
@@ -175,6 +177,8 @@ Server rejects any build where the values sum to more than 100.
   "version": 1,
   "creator": "player_name",
   "build": { "speed": 20, "armor": 15, "weapon_power": 25, "accuracy": 20, "fire_rate": 10, "sensor_range": 10 },
+  "variables": { "aggression": 70, "preferred_distance": 200 },
+  "behaviours": { "retreat": ["turn_toward_enemy", "move_backward"] },
   "logic": [
     {
       "priority": 1,
@@ -183,18 +187,23 @@ Server rejects any build where the values sum to more than 100.
     },
     {
       "priority": 2,
-      "if": { "op": "lt", "left": "enemy.distance", "right": 200 },
-      "then": "shoot"
+      "if": { "op": "lt", "left": "enemy.distance", "right": "vars.preferred_distance" },
+      "then": ["turn_toward_enemy", "shoot"],
+      "else": "move_toward_enemy"
     }
   ]
 }
 ```
 
 - `name`, `creator`, `version`, `build`, and `logic` are all required fields — the real validator rejects a robot missing any of them, `logic` included even though no frontend page can author it yet (that's Milestone 5, not built). `builder.html` covers this by asking for a creator name and shipping every robot with a fixed baseline `logic` (find an enemy, close in, shoot) until a real logic editor exists — see `DEFAULT_LOGIC` in `frontend/src/builder.js`. `upload.html` has no such fallback: it validates whatever file it's given and surfaces the real error if a field is missing, which is correct behavior for a validator, not a bug to fix.
-- `logic` rules run in ascending `priority` order; the first matching rule wins for that tick.
+- `variables` is optional: player-defined named numbers, resolvable in any condition via a `vars.` prefix (`"vars.preferred_distance"`), exactly like `self.` and `enemy.` below.
+- `behaviours` is optional: named, reusable action lists (1-5 actions each, from the same allowed-actions list below — no nesting). A `then`/`else` may reference a behaviour by name instead of repeating its action list.
+- `logic` rules run in ascending `priority` order; the first rule whose condition is `true` wins for that tick and its `then` runs. If a rule's condition is `false` **and it has an `else`**, that action runs instead and the cascade still stops there — a rule with `else` always resolves one way or the other. A rule with no `else` that doesn't match just falls through to the next priority, as before.
+- `then`/`else` is one of: a literal action name, a behaviour name, or a list of 1-5 of either — every action in the list runs that same tick, in order (e.g. `["turn_toward_enemy", "shoot"]`).
 - Allowed comparison ops: `lt`, `gt`, `eq`, `neq`, `and`, `or`, `not`.
-- Allowed actions (stage 1): `move_forward`, `move_backward`, `turn_left`, `turn_right`, `turn_toward_enemy`, `move_toward_enemy`, `move_away_from_enemy`, `shoot`, `select_nearest_enemy`, `select_weakest_enemy`, `wait`, `scan`.
-- Interpreter must cap execution at a fixed number of operations per robot per tick (start at 50) and skip the robot's turn for that tick if exceeded.
+- Allowed actions (stage 1): `move_forward`, `move_backward`, `turn_left`, `turn_right`, `turn_toward_enemy`, `move_toward_enemy`, `move_away_from_enemy`, `shoot`, `select_nearest_enemy`, `select_weakest_enemy`, `wait`, `scan`. `turn_toward_enemy`/`move_toward_enemy`/`move_away_from_enemy` fall back to the last known enemy position (see `self.seconds_since_enemy_seen` below) when no enemy is currently visible, instead of doing nothing.
+- Interpreter must cap execution at a fixed number of operations per robot per tick (start at 50) and skip the robot's turn for that tick if exceeded. Movement/turning/scanning/shooting also cost energy (see `self.energy_pct` below) — an action whose cost the robot can't afford simply doesn't happen that tick, same as a weapon still on cooldown.
+- Condition context available under `self.`: `health_pct`, `energy_pct`, `previous_health_pct` (health going into the *previous* tick — compare against `health_pct` to detect "I was just hit"), `x`, `y`, `direction`, `seconds_since_enemy_seen`, `shots_fired`, `shots_hit`. Under `enemy.`: `distance`, `health_pct`, `direction`, `visible` (all zeroed/false when no enemy is in sensor range).
 
 ## 7. Robot validation endpoint
 
@@ -243,13 +252,53 @@ One row per robot, matching what the SQLite persistence layer stores:
 
 `GET /api/leaderboard` returns an array of these, sorted by rounds won then win percentage — `leaderboard.js` fetches it live. Verified the shapes match exactly against a running `backend/app/db.py`; `frontend/src/mock/leaderboard.mock.json` is no longer used by the page but is left in place as a schema example.
 
-## 9. Sensor visibility
+## 9. Replays (Milestone 9, "Replay mode")
+
+Every round is recorded automatically — no opt-in needed. `round_end` (section 2) carries the round's `replay_id`.
+
+`GET /api/replays` — a lightweight index of recorded rounds, newest first, for a "past matches" list:
+
+```json
+[
+  { "round_result_id": 42, "match_id": 7, "round_number": 3, "duration_seconds": 24.6, "winner_name": "Hunter V3" }
+]
+```
+
+`GET /api/replays/{round_result_id}` — the full recording for one round:
+
+```json
+{
+  "found": true,
+  "frames": [
+    { "type": "game_state", "tick": 1, "robots": [ "...": "..." ], "projectiles": [], "events": [] }
+  ],
+  "markers": { "first_shot": 12, "first_hit": 34, "final_kill": 210 },
+  "health_markers": {
+    "robot_1": { "below_50": 88, "below_20": 190 },
+    "robot_2": { "below_50": null, "below_20": null }
+  }
+}
+```
+
+`frames` is the exact `game_state` sequence as it was broadcast live — replay it by feeding frames to the same rendering code `ArenaScene.js` already uses for live play, just without a live WebSocket. `markers` and `health_markers` are tick numbers into `frames`, for a scrubber/timeline UI to jump to ("first contact" = `first_shot`, per the project brief's example timeline). A `null` marker means that moment never happened in this round. `{"found": false}` (no `frames` key) means that id doesn't exist or was never recorded — `/api/simulate` runs (section 10) are never recorded, since they're a fast what-if tool, not a real match.
+
+## 10. Fast simulation mode
+
+`POST /api/simulate` — `{"robot_a": {...}, "robot_b": {...}, "rounds": 200}` (both robot bodies match section 6's shape; `rounds` defaults to 100, capped at 2000). Runs headlessly (no real-time pacing, no WebSocket broadcast, nothing persisted) and returns a win/draw tally:
+
+```json
+{ "valid": true, "rounds_played": 200, "wins": { "robot_a": 109, "robot_b": 12 }, "draws": 79 }
+```
+
+For comparing two robot versions statistically (PDF section 29) instead of watching each one play out live. A `{"valid": false, "field": "robot_a", "errors": [...]}` response (same error shape as section 7) means one of the two robots failed validation before any simulation ran.
+
+## 11. Sensor visibility
 
 A robot only receives enemy data for robots within its `sensor_range`. Never expose an enemy's exact build stats or program — only what a sensor plausibly reveals (distance, direction, estimated health).
 
-## 10. Robot debugger (client-side, own-robot-only)
+## 12. Robot debugger (client-side, own-robot-only)
 
-Clicking a robot in the Arena shows a debug panel. Since `game_state` never includes what a robot is "thinking" (no target, no active rule, no action — only position/health/energy), and never will for other players' robots (their program is never sent to your browser, matching section 9's information-hiding rule), this only works for the robot *you* uploaded:
+Clicking a robot in the Arena shows a debug panel. Since `game_state` never includes what a robot is "thinking" (no target, no active rule, no action — only position/health/energy), and never will for other players' robots (their program is never sent to your browser, matching section 11's information-hiding rule), this only works for the robot *you* uploaded:
 
 - The Lobby persists `player.id` and your validated robot JSON to `localStorage` (`botforge:my-player-id`, `botforge:my-robot`) the moment they're known.
 - The Arena reads both, and `frontend/src/robotDebugger.js` re-runs the interpreter's exact algorithm (condition evaluation, priority/else, sequence/behaviour expansion — mirrors `backend/app/interpreter.py`) purely to display the result. It never feeds back into gameplay; the server's own broadcast is still the only thing that actually moves anything.
@@ -257,7 +306,7 @@ Clicking a robot in the Arena shows a debug panel. Since `game_state` never incl
 - Two backend constants have no other way to reach the client and are duplicated with a comment flagging the coupling: `DEFAULT_MAX_ENERGY` (100) and the `sensor_range` build-stat-to-pixel formula (`BASE_SENSOR_RANGE + stat * SENSOR_RANGE_PER_POINT`). If `backend/app/robot.py` changes either, the debugger drifts silently until someone notices.
 - `shots_fired`/`shots_hit` and weapon-cooldown state aren't broadcast at all, so the debugger shows nothing for them rather than guessing.
 
-## 11. Non-negotiable rules
+## 13. Non-negotiable rules
 
 - The server decides truth; the browser never computes hits or winners itself.
 - Uploaded robots are JSON only — never arbitrary code execution.

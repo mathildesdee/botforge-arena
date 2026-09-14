@@ -84,3 +84,56 @@ def test_leaderboard_row_defaults_when_robot_has_no_matches_yet(tmp_path, monkey
     assert leaderboard[0]["rounds_won"] == 0
     assert leaderboard[0]["win_pct"] == 0.0
     assert leaderboard[0]["accuracy"] == 0.0
+
+
+def test_save_and_get_replay_round_trips(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    _, _, hunter_version_id = db.save_robot_version("alice", SAMPLE)
+    _, _, tank_version_id = db.save_robot_version("bob", OPPONENT)
+    lookup = {"arena_robot_1": hunter_version_id, "arena_robot_2": tank_version_id}
+    match_id = db.create_match(list(lookup.values()))
+
+    round1 = RoundResult(round_number=1, winner_id="arena_robot_1", survivors=["arena_robot_1"],
+                          points_awarded={"arena_robot_1": 3}, duration=12.0)
+    round_result_id = db.record_round_result(match_id, round1, lookup)
+
+    recording = {
+        "frames": [{"type": "game_state", "tick": 1, "robots": [], "projectiles": [], "events": []}],
+        "markers": {"first_shot": 1, "first_hit": None, "final_kill": None},
+        "health_markers": {},
+    }
+    db.save_replay(round_result_id, recording)
+
+    fetched = db.get_replay(round_result_id)
+    assert fetched == recording
+
+
+def test_get_replay_returns_none_when_round_was_never_recorded(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+    assert db.get_replay(999) is None
+
+
+def test_list_replays_returns_newest_first_with_winner_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    _, _, hunter_version_id = db.save_robot_version("alice", SAMPLE)
+    _, _, tank_version_id = db.save_robot_version("bob", OPPONENT)
+    lookup = {"arena_robot_1": hunter_version_id, "arena_robot_2": tank_version_id}
+    match_id = db.create_match(list(lookup.values()))
+
+    round1 = RoundResult(round_number=1, winner_id="arena_robot_1", survivors=["arena_robot_1"],
+                          points_awarded={"arena_robot_1": 3}, duration=12.0)
+    round2 = RoundResult(round_number=2, winner_id="arena_robot_2", survivors=["arena_robot_2"],
+                          points_awarded={"arena_robot_2": 3}, duration=8.0)
+    id1 = db.record_round_result(match_id, round1, lookup)
+    id2 = db.record_round_result(match_id, round2, lookup)
+    db.save_replay(id1, {"frames": [], "markers": {}, "health_markers": {}})
+    db.save_replay(id2, {"frames": [], "markers": {}, "health_markers": {}})
+
+    replays = db.list_replays()
+    assert [r["round_result_id"] for r in replays] == [id2, id1]
+    assert replays[0]["winner_name"] == "Tank"
