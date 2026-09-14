@@ -21,7 +21,7 @@ export const WS_URL = `${WS_PROTOCOL}://${BACKEND_HOST}:${BACKEND_PORT}/ws`;
 // Practice mode (docs/ARCHITECTURE.md-adjacent, see backend/app/main.py's
 // practice_endpoint): a separate connection from /ws, one player driving
 // one robot with the keyboard, outside the match/lobby protocol.
-export const PRACTICE_WS_URL = 'ws://localhost:8000/ws/practice';
+export const PRACTICE_WS_URL = `${WS_PROTOCOL}://${BACKEND_HOST}:${BACKEND_PORT}/ws/practice`;
 
 // See docs/ARCHITECTURE.md #7.
 export const VALIDATE_URL = `http://${BACKEND_HOST}:${BACKEND_PORT}/api/robots/validate`;
