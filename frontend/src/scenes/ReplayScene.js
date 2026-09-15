@@ -6,6 +6,7 @@
 // speed as watching live.
 
 import BattleRenderer from '../battleRenderer.js';
+import SoundToggle from '../hud/SoundToggle.js';
 
 const TICK_INTERVAL_MS = 1000 / 20; // backend/app/main.py TICK_RATE = 20
 
@@ -28,6 +29,7 @@ export default class ReplayScene extends Phaser.Scene {
       .setStrokeStyle(2, 0x2a3442);
 
     this.renderer = new BattleRenderer(this);
+    this.soundToggle = new SoundToggle(this);
     this.applyFrame(0);
   }
 
@@ -63,9 +65,11 @@ export default class ReplayScene extends Phaser.Scene {
     this.playing = false;
     this.renderer.reset();
     const clamped = Phaser.Math.Clamp(targetIndex, 0, this.frames.length - 1);
+    this.renderer.silent = true;
     for (let i = 0; i <= clamped; i++) {
       this.renderer.applyState(this.frames[i]);
     }
+    this.renderer.silent = false;
     this.frameIndex = clamped;
     this.onFrameChange(this.frameIndex, this.frames.length);
   }

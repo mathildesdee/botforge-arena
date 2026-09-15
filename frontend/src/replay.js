@@ -5,6 +5,7 @@
 
 import ReplayScene from './scenes/ReplayScene.js';
 import { REPLAYS_URL } from './config.js';
+import { unlockAudio } from './sound.js';
 
 const listViewEl = document.getElementById('replay-list-view');
 const listEl = document.getElementById('replay-list');
@@ -42,7 +43,10 @@ function renderList(replays) {
     watchButton.type = 'button';
     watchButton.className = 'primary';
     watchButton.textContent = 'Watch';
-    watchButton.addEventListener('click', () => loadReplay(entry.round_result_id));
+    watchButton.addEventListener('click', () => {
+      unlockAudio(); // real user gesture — the one place autoplay-blocked audio can start
+      loadReplay(entry.round_result_id);
+    });
 
     item.append(info, watchButton);
     listEl.appendChild(item);

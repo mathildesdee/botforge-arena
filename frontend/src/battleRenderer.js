@@ -6,6 +6,7 @@
 // place. Knows nothing about where frames come from.
 
 import { muzzleFlash, hitSpark, explosion } from './effects.js';
+import { playShoot, playHit, playExplosion } from './sound.js';
 
 const FACING_LENGTH = 26;
 const HEALTH_BAR_WIDTH = 40;
@@ -18,6 +19,11 @@ export default class BattleRenderer {
     this.robotNames = new Map();
     this.projectileViews = new Map();
     this.onRobotUpdate = onRobotUpdate || (() => {});
+    // ReplayScene sets this true while it fast-forwards silently through
+    // many frames at once for a scrubber seek — without it, jumping to
+    // frame 400 would replay every shot/hit/explosion since frame 0 as
+    // one instant burst of noise.
+    this.silent = false;
   }
 
   applyState(state) {
@@ -33,6 +39,7 @@ export default class BattleRenderer {
       const view = this.robotViews.get(event.target_id);
       if (view) {
         hitSpark(this.scene, view.container.x, view.container.y);
+        if (!this.silent) playHit();
         // Flash red now; the next tick's updateRobotView (a fraction of
         // a second later) naturally restores the correct alive/health
         // color, so there's no need to schedule a manual revert here.
@@ -42,6 +49,7 @@ export default class BattleRenderer {
       const view = this.robotViews.get(event.robot_id);
       if (view) {
         explosion(this.scene, view.container.x, view.container.y);
+        if (!this.silent) playExplosion();
       }
     }
   }
@@ -109,6 +117,7 @@ export default class BattleRenderer {
         const ownerView = this.robotViews.get(p.owner_id);
         if (ownerView) {
           muzzleFlash(this.scene, ownerView.container.x, ownerView.container.y, p.direction);
+          if (!this.silent) playShoot();
         }
       } else {
         // Leave a quickly-fading ghost at the old spot before moving —

@@ -51,17 +51,37 @@ function evaluateCondition(condition, context) {
   return false;
 }
 
+// Builds a full trace over every rule, in priority order — not just
+// the winning one — so a UI can show the whole cascade (PDF section
+// 27, "logic visualization"): which rules were checked and found
+// false, which one matched (or fired its `else`) and actually drove
+// this tick's action, and which later rules were never reached
+// because an earlier one already won. This mirrors
+// backend/app/interpreter.py's actual cascade exactly; it just also
+// records what happened at each step instead of stopping at the
+// first answer.
 function decide(logic, context) {
   const sorted = [...logic].sort((a, b) => a.priority - b.priority);
+  const trace = [];
+  let winner = null;
+
   for (const rule of sorted) {
-    if (evaluateCondition(rule.if, context)) {
-      return { action: rule.then, rule, matched: true };
+    if (winner) {
+      trace.push({ priority: rule.priority, description: describeRule(rule), status: 'unreached' });
+      continue;
     }
-    if (rule.else) {
-      return { action: rule.else, rule, matched: false };
+    if (evaluateCondition(rule.if, context)) {
+      trace.push({ priority: rule.priority, description: describeRule(rule), status: 'matched' });
+      winner = { action: rule.then, rule };
+    } else if (rule.else) {
+      trace.push({ priority: rule.priority, description: describeRule(rule), status: 'else' });
+      winner = { action: rule.else, rule };
+    } else {
+      trace.push({ priority: rule.priority, description: describeRule(rule), status: 'false' });
     }
   }
-  return { action: null, rule: null, matched: false };
+
+  return { action: winner?.action ?? null, rule: winner?.rule ?? null, trace };
 }
 
 function describeCondition(condition) {
@@ -75,6 +95,11 @@ function describeCondition(condition) {
 
 function describeActionRef(actionRef) {
   return Array.isArray(actionRef) ? actionRef.map(describeActionRef).join(' + ') : actionRef;
+}
+
+function describeRule(rule) {
+  const elsePart = rule.else ? ` ELSE ${describeActionRef(rule.else)}` : '';
+  return `IF ${describeCondition(rule.if)} THEN ${describeActionRef(rule.then)}${elsePart}`;
 }
 
 // Mirrors backend/app/interpreter.py's _expand_actions exactly: a
@@ -155,7 +180,7 @@ export function createRobotDebugger(robotDefinition) {
       vars: robotDefinition.variables || {},
     };
 
-    const { action, rule } = decide(robotDefinition.logic || [], context);
+    const { action, rule, trace } = decide(robotDefinition.logic || [], context);
     const actions = action !== null ? expandActions(action, robotDefinition.behaviours || {}) : [];
 
     // Mirrors the *fixed* backend/app/interpreter.py: both selection
@@ -179,11 +204,8 @@ export function createRobotDebugger(robotDefinition) {
       enemyDistance: enemy ? Math.round(context.enemy.distance) : null,
       actions,
       rulePriority: rule ? rule.priority : null,
-      ruleDescription: rule
-        ? `IF ${describeCondition(rule.if)} THEN ${describeActionRef(rule.then)}${
-            rule.else ? ` ELSE ${describeActionRef(rule.else)}` : ''
-          }`
-        : 'no rule matched',
+      ruleDescription: rule ? describeRule(rule) : 'no rule matched',
+      trace,
     };
   }
 

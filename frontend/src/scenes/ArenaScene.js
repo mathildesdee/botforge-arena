@@ -8,11 +8,13 @@ import JsonSocket from '../net/JsonSocket.js';
 import MatchHud from '../hud/MatchHud.js';
 import TournamentHud from '../hud/TournamentHud.js';
 import RobotDebugPanel from '../hud/RobotDebugPanel.js';
+import SoundToggle from '../hud/SoundToggle.js';
 import BattleRenderer from '../battleRenderer.js';
 import { showBanner, showCountdown } from '../effects.js';
 import { createRobotDebugger } from '../robotDebugger.js';
 import { MY_PLAYER_ID_KEY, MY_ROBOT_KEY } from '../robotDebuggerStorage.js';
 import { WS_URL } from '../config.js';
+import { playCountdownTick, playFightGo, playWin, unlockAudio } from '../sound.js';
 
 const MAX_DEBUG_DT = 0.2; // clamp so a backgrounded tab doesn't report a huge gap
 
@@ -45,6 +47,7 @@ export default class ArenaScene extends Phaser.Scene {
     this.hud = new MatchHud(this);
     this.tournamentHud = new TournamentHud(this);
     this.debugPanel = new RobotDebugPanel(this);
+    this.soundToggle = new SoundToggle(this);
     this.renderer = new BattleRenderer(this, {
       onRobotUpdate: (robot, allRobots) => {
         if (this.selectedRobotId === robot.id) this.refreshDebugPanel(robot, allRobots);
@@ -85,11 +88,15 @@ export default class ArenaScene extends Phaser.Scene {
         break;
       case 'match_start':
         this.hud.setTotalRounds(message.total_rounds);
-        showCountdown(this);
+        showCountdown(this, undefined, undefined, (step) => {
+          if (step === 'FIGHT!') playFightGo();
+          else playCountdownTick();
+        });
         break;
       case 'round_start':
         this.hud.setRound(message.round, message.total_rounds);
         showBanner(this, `Round ${message.round}`, { holdMs: 700 });
+        playCountdownTick();
         break;
       case 'round_end':
         this.hud.setScores(message.scores, this.renderer.robotNames);
@@ -99,6 +106,7 @@ export default class ArenaScene extends Phaser.Scene {
         this.hud.setMatchFinished();
         const winnerName = this.renderer.robotNames.get(message.winner_id) || 'Nobody';
         showBanner(this, `🏆 ${winnerName} wins!`, { holdMs: 2500, color: '#ffd54f' });
+        playWin();
         break;
       }
       case 'tournament_start':
@@ -124,6 +132,7 @@ export default class ArenaScene extends Phaser.Scene {
   }
 
   handleRobotClicked(robotId) {
+    unlockAudio(); // a real user gesture — as good a place as the sound toggle to unblock autoplay
     if (this.selectedRobotId === robotId) {
       this.selectedRobotId = null;
       this.debugPanel.hide();

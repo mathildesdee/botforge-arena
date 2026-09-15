@@ -76,10 +76,11 @@ export function showBanner(scene, text, { holdMs = 1200, color = '#e8edf2' } = {
   });
 }
 
-export function showCountdown(scene, steps = ['3', '2', '1', 'FIGHT!'], stepMs = 700) {
+export function showCountdown(scene, steps = ['3', '2', '1', 'FIGHT!'], stepMs = 700, onStep) {
   steps.forEach((step, i) => {
     scene.time.delayedCall(i * stepMs, () => {
       showBanner(scene, step, { holdMs: stepMs - 250 });
+      onStep?.(step, i);
     });
   });
 }
